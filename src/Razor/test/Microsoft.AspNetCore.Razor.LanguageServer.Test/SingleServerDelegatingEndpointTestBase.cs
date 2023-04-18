@@ -38,6 +38,7 @@ public abstract class SingleServerDelegatingEndpointTestBase : LanguageServerTes
     internal DocumentContextFactory DocumentContextFactory { get; private set; }
     internal LanguageServerFeatureOptions LanguageServerFeatureOptions { get; private set; }
     internal TestLanguageServer LanguageServer { get; private set; }
+    internal ClientNotifierServiceBase DiagnosticsLanguageServer { get; private set; }
     internal RazorDocumentMappingService DocumentMappingService { get; private set; }
 
     protected SingleServerDelegatingEndpointTestBase(ITestOutputHelper testOutput)
@@ -74,7 +75,55 @@ public abstract class SingleServerDelegatingEndpointTestBase : LanguageServerTes
             options.HtmlVirtualDocumentSuffix == realLanguageServerFeatureOptions.HtmlVirtualDocumentSuffix,
             MockBehavior.Strict);
         LanguageServer = new TestLanguageServer(csharpServer, csharpDocumentUri, DisposalToken);
+        DiagnosticsLanguageServer = new DiagnosticsClientNotifierService();
         DocumentMappingService = new DefaultRazorDocumentMappingService(LanguageServerFeatureOptions, DocumentContextFactory, LoggerFactory);
+    }
+
+    internal class DiagnosticsClientNotifierService : ClientNotifierServiceBase
+    {
+        //private DiagnosticLanguageServer _innerLanguageServer;
+        public override Task OnInitializedAsync(VSInternalClientCapabilities clientCapabilities, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        public override Task SendNotificationAsync<TParams>(string method, TParams @params, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Task SendNotificationAsync(string method, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Task<TResponse> SendRequestAsync<TParams, TResponse>(string method, TParams @params, CancellationToken cancellationToken)
+        {
+            object result = new RazorPullDiagnosticResponse(
+                new[]
+                {
+                    new VSInternalDiagnosticReport()
+                    {
+                        ResultId = "5",
+                        Diagnostics = new Diagnostic[]
+                        {
+                            new()
+                            {
+                                Range = new Range()
+                                {
+                                    Start = new Position(10, 19),
+                                    End = new Position(10, 23)
+                                },
+                                Code = "CS0104",
+                                Severity = DiagnosticSeverity.Error,
+                                Source = "DocumentPullDiagnosticHandler",
+                                Message = "The name 'CallOnMe' does not exist in the current context"
+                            }
+                        }
+                    }
+                }, Array.Empty<VSInternalDiagnosticReport>());
+            return Task.FromResult((TResponse)result);
+        }
     }
 
     internal class TestLanguageServer : ClientNotifierServiceBase
@@ -90,6 +139,7 @@ public abstract class SingleServerDelegatingEndpointTestBase : LanguageServerTes
             Uri csharpDocumentUri,
             CancellationToken cancellationToken)
         {
+
             _csharpServer = csharpServer;
             _csharpDocumentUri = csharpDocumentUri;
             _cancellationToken = cancellationToken;

@@ -12,8 +12,46 @@ using Microsoft.VisualStudio.Composition;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Nerdbank.Streams;
 using StreamJsonRpc;
+using Xunit;
 
 namespace Microsoft.AspNetCore.Razor.LanguageServer.Test.Common;
+
+public class DiagnosticLanguageServerForBenchmarks
+{
+    private readonly CSharpTestLspServer _csharpServer;
+    private readonly Uri _csharpDocumentUri;
+    private readonly CancellationToken _cancellationToken;
+
+    public DiagnosticLanguageServerForBenchmarks(
+        CSharpTestLspServer csharpServer,
+        Uri csharpDocumentUri,
+        CancellationToken cancellationToken)
+    {
+        _csharpServer = csharpServer;
+        _csharpDocumentUri = csharpDocumentUri;
+        _cancellationToken = cancellationToken;
+    }
+
+    public async Task<TResponse> SendRequestAsync<TParams, TResponse>(string method, TParams @params, CancellationToken cancellationToken)
+    {
+        Assert.Equal("RazorLanguageServerCustomMessageTargets.RazorHoverEndpointName", method);
+        //var hoverParams = Assert.IsType<DelegatedPositionParams>(@params);
+
+        var hoverRequest = new TextDocumentPositionParams()
+        {
+            TextDocument = new TextDocumentIdentifier()
+            {
+                Uri = _csharpDocumentUri
+            },
+            //Position = hoverParams.ProjectedPosition
+        };
+
+        var result = await _csharpServer.ExecuteRequestAsync<VisualStudio.LanguageServer.Protocol.TextDocumentPositionParams, TResponse>(
+            Methods.TextDocumentHoverName, hoverRequest, _cancellationToken);
+
+        return result;
+    }
+}
 
 public sealed class CSharpTestLspServer : IAsyncDisposable
 {

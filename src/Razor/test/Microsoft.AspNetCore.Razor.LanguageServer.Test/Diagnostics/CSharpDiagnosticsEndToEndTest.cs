@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.LanguageServer.EndpointContracts;
 using Microsoft.AspNetCore.Razor.LanguageServer.Extensions;
@@ -23,22 +24,61 @@ public class CSharpDiagnosticsEndToEndTest : SingleServerDelegatingEndpointTestB
     {
     }
 
+    private string GetFileContents()
+    {
+        var sb = new StringBuilder();
+
+        sb.Append("""
+            @using System;
+            """);
+
+        for (var i = 0; i < (1); i++) // not 100
+        {
+            sb.Append($$"""
+            @{
+                var y{{i}} = 456;
+            }
+
+            <div>
+                <p>Hello there Mr {{i}}</p>
+            </div>
+            """);
+        }
+
+        sb.Append("""
+
+             <div></div>
+
+             @functions
+             {
+                public void M()
+                {
+                    {|CS0104:CallOnMe|}();
+                }
+             }
+
+             """);
+
+        return sb.ToString();
+    }
+
     [Fact]
     public async Task Handle()
     {
-        var input = """
+        var input = GetFileContents();
+        //var input = """
 
-            <div></div>
+        //    <div></div>
 
-            @functions
-            {
-                public void M()
-                {
-                    {|CS0103:CallOnMe|}();
-                }
-            }
+        //    @functions
+        //    {
+        //        public void M()
+        //        {
+        //            {|CS0104:CallOnMe|}();
+        //        }
+        //    }
 
-            """;
+        //    """;
 
         await ValidateDiagnosticsAsync(input);
     }
@@ -56,7 +96,7 @@ public class CSharpDiagnosticsEndToEndTest : SingleServerDelegatingEndpointTestB
         var requestContext = new RazorRequestContext(documentContext, Logger, null!);
 
         var translateDiagnosticsService = new RazorTranslateDiagnosticsService(DocumentMappingService, LoggerFactory);
-        var diagnosticsEndPoint = new DocumentPullDiagnosticsEndpoint(LanguageServerFeatureOptions, translateDiagnosticsService, LanguageServer);
+        var diagnosticsEndPoint = new DocumentPullDiagnosticsEndpoint(LanguageServerFeatureOptions, translateDiagnosticsService, LanguageServer);//DiagnosticsLanguageServer
 
         var diagnosticsRequest = new VSInternalDocumentDiagnosticsParams
         {

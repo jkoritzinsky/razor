@@ -12,10 +12,12 @@ using BenchmarkDotNet.Attributes;
 using Microsoft.AspNetCore.Razor.LanguageServer;
 using Microsoft.AspNetCore.Razor.LanguageServer.Diagnostics;
 using Microsoft.AspNetCore.Razor.LanguageServer.EndpointContracts;
+using Microsoft.AspNetCore.Razor.LanguageServer.Protocol;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
 using Microsoft.CodeAnalysis.Razor.Workspaces;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
+using Microsoft.AspNetCore.Razor.LanguageServer.Test.Common;
 
 namespace Microsoft.AspNetCore.Razor.Microbenchmarks.LanguageServer;
 
@@ -174,6 +176,7 @@ public class RazorDiagnosticsBenchmark : RazorLanguageServerBenchmarkBase
 
     private class ClientNotifierService : ClientNotifierServiceBase
     {
+        //private DiagnosticLanguageServer _innerLanguageServer;
         public override Task OnInitializedAsync(VSInternalClientCapabilities clientCapabilities, CancellationToken cancellationToken)
         {
             return Task.CompletedTask;
@@ -217,4 +220,5 @@ public class RazorDiagnosticsBenchmark : RazorLanguageServerBenchmarkBase
             return Task.FromResult((TResponse)result);
         }
     }
+
 }

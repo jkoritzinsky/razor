@@ -20,8 +20,9 @@
     <ProjectReference Include="..\..\src\Microsoft.AspNetCore.Razor.LanguageServer\Microsoft.AspNetCore.Razor.LanguageServer.csproj" />
     <ProjectReference Include="..\..\src\Microsoft.AspNetCore.Razor.ProjectEngineHost\Microsoft.AspNetCore.Razor.ProjectEngineHost.csproj" />
     <ProjectReference Include="..\..\src\Microsoft.CodeAnalysis.Remote.Razor\Microsoft.CodeAnalysis.Remote.Razor.csproj" />
+    <ProjectReference Include="..\..\test\Microsoft.AspNetCore.Razor.LanguageServer.Test.Common\Microsoft.AspNetCore.Razor.LanguageServer.Test.Common.csproj" />
   </ItemGroup>
-
+  
   <ItemGroup>
     <Compile Remove="Resources\**\*.*" />
     <None Remove="Resources\**\*.*" />
