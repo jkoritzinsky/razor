@@ -4,6 +4,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -43,6 +44,12 @@ public class RazorDiagnosticsBenchmark : RazorLanguageServerBenchmarkBase
     [GlobalSetup]
     public async Task SetupAsync()
     {
+        var refactoringProviderNames = typeof(RazorPredefinedCodeRefactoringProviderNames)
+            .GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Static | BindingFlags.Public)
+            .Where(property => property.PropertyType == typeof(string))
+            .Select(property => property.GetValue(null) as string)
+            .WithoutNull();
+        var testingIvt = typeof(Microsoft.CodeAnalysis.ExternalAccess.Razor.IRazorLanguageServerTarget);
         var languageServer = RazorLanguageServer.GetInnerLanguageServerForTesting();
 
         DocumentPullDiagnosticsEndpoint = new DocumentPullDiagnosticsEndpoint(
