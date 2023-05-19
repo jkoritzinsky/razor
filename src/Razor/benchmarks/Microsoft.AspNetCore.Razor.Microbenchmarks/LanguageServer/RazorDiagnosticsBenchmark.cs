@@ -44,18 +44,18 @@ public class RazorDiagnosticsBenchmark : RazorLanguageServerBenchmarkBase
     [GlobalSetup]
     public async Task SetupAsync()
     {
-        var refactoringProviderNames = typeof(RazorPredefinedCodeRefactoringProviderNames)
-            .GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Static | BindingFlags.Public)
-            .Where(property => property.PropertyType == typeof(string))
-            .Select(property => property.GetValue(null) as string)
-            .WithoutNull();
-        var testingIvt = typeof(Microsoft.CodeAnalysis.ExternalAccess.Razor.IRazorLanguageServerTarget);
+        //var refactoringProviderNames = typeof(RazorPredefinedCodeRefactoringProviderNames)
+        //    .GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Static | BindingFlags.Public)
+        //    .Where(property => property.PropertyType == typeof(string))
+        //    .Select(property => property.GetValue(null) as string)
+        //    .WithoutNull();
+        //var testingIvt = typeof(Microsoft.CodeAnalysis.ExternalAccess.Razor.IRazorLanguageServerTarget);
         var languageServer = RazorLanguageServer.GetInnerLanguageServerForTesting();
 
         DocumentPullDiagnosticsEndpoint = new DocumentPullDiagnosticsEndpoint(
             languageServerFeatureOptions: languageServer.GetRequiredService<LanguageServerFeatureOptions>(),
             translateDiagnosticsService: languageServer.GetRequiredService<RazorTranslateDiagnosticsService>(),
-            languageServer: new ClientNotifierService(BuildDiagnostics(N)));
+            languageServer: new ClientNotifierService(BuildDiagnostics(N)), null!);
         var projectRoot = Path.Combine(RepoRoot, "src", "Razor", "test", "testapps", "ComponentApp");
         var projectFilePath = Path.Combine(projectRoot, "ComponentApp.csproj");
         _filePath = Path.Combine(projectRoot, "Components", "Pages", $"Generated.razor");
