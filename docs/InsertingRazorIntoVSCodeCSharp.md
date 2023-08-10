@@ -25,17 +25,19 @@ First you need to locally download and extract the build artifacts that you want
 
 1. Go to the Razor build you want to insert at https://dev.azure.com/dnceng/internal/_build?definitionId=262
 
-    - You may want to use a build that has already successfully been inserted into Visual Studio for Windows, so that we get the benefit from the various smoke tests and regression tests that are present in that process.
+   - You may want to use a build that has already successfully been inserted into Visual Studio for Windows, so that we get the benefit from the various smoke tests and regression tests that are present in that process.
 
 2. Click the "X Artifacts" link from the build information
-    ![image](![Alt text](images/build_summary.png)
+   ![image](![Alt text](images/build_summary.png)
 3. Find the **BlobArtifacts** artifact and download it by clicking the `...` menu:
-    - You won't need everything in BlobArtifacts but its much more convenient to download a single file, and you only approximately 7% of the download is unnecessary.
 
-    ![image](images/blobartifacts.png)
+   - You won't need everything in BlobArtifacts but its much more convenient to download a single file, and you only approximately 7% of the download is unnecessary.
+
+   ![image](images/blobartifacts.png)
+
 4. Unzip the BlobArtifacts.zip file you end up with and delete:
-    - Any file that doesn't start with "RazorLanguageServer"
-    - The file that starts with "RazorLanguageServer-PlatformAgnostic"
+   - Any file that doesn't start with "RazorLanguageServer"
+   - The file that starts with "RazorLanguageServer-PlatformAgnostic"
 
 At the end of this process you should have a folder containing 9 files. Rename the folder to the version number, pulled from any one of the file names in the folder.
 
@@ -45,13 +47,13 @@ At the end of this process you should have a folder containing 9 files. Rename t
 
 1. Wait for the permissions you requested at the top of this document to be accepted.
 2. Go to the server, and the `release` share, then the `\ddpublish\vscode-razor` folder
-    - For the name of the server, skip to step 4, and you'll see it in the Azure DevOps UI. The actual server name is unimportant, and liable to change, as long as its the one the release pipeline linked below is looking at.
+   - For the name of the server, skip to step 4, and you'll see it in the Azure DevOps UI. The actual server name is unimportant, and liable to change, as long as its the one the release pipeline linked below is looking at.
 3. Upload the entire folder you created above.
-    - Alternatively, create a folder named the version that you'll be publishing, i.e. `7.0.0-preview.23328.2`, and then upload each of the 9 zip files you have after the above steps.
+   - Alternatively, create a folder named the version that you'll be publishing, i.e. `7.0.0-preview.23328.2`, and then upload each of the 9 zip files you have after the above steps.
 4. Navigate to the CDN upload [Release Pipeline](https://devdiv.visualstudio.com/DevDiv/_releases2?definitionId=1025&view=mine&_a=releases) and click **Create release** in the top right corner.
-    - **BranchName:** use the format `vscode-razor-{VERSION}` where `{VERSION}` is something like `7.0.0-preview.23328.2`.
-    - **OwnerAliases:** Leave existing aliases, adding your alias(es) in the form `{DOMAIN}\{ALIAS}` where `{ALIAS}` is something like `REDMOND\FNURK` - semicolon delimited, including the single quotes.
-    - **SecuredSharePath:** Replace `<yourPath>` with the full path of the folder you created above in Step 2 of this section.
+   - **BranchName:** use the format `vscode-razor-{VERSION}` where `{VERSION}` is something like `7.0.0-preview.23328.2`.
+   - **OwnerAliases:** Leave existing aliases, adding your alias(es) in the form `{DOMAIN}\{ALIAS}` where `{ALIAS}` is something like `REDMOND\FNURK` - semicolon delimited, including the single quotes.
+   - **SecuredSharePath:** Replace `<yourPath>` with the full path of the folder you created above in Step 2 of this section.
 5. Click `Create`
 6. At the top of the page it should mention that `Release - X` has been created. Click on it.
 7. When ready to publish, hover over the `Publish Secured Share Environment` box and click the `Deploy` button that appears.
@@ -85,7 +87,7 @@ You need to put that in your text editor of choice, remove everything but the `h
 ### Update vscode-csharp
 
 1. Fork the [C# extension repo](https://github.com/dotnet/vscode-csharp) and then clone your fork.
-    - If you already have the repo cloned, ensure that you `git clean -xdf` prior to doing any changes.
+   - If you already have the repo cloned, ensure that you `git clean -xdf` prior to doing any changes.
 2. Create a new branch off of `main` unless told otherwise.
 3. Open the `launch.json` file.
 4. Find the "Update razor package dependencies" task.
@@ -94,10 +96,6 @@ You need to put that in your text editor of choice, remove everything but the `h
 7. Run the task
 8. It takes a while to run, as it has to download and compute hashes for each file, but when finished it will have changed the package.json file.
 9. Commit both files, push your branch, and create a PR.
-
-### Optional additional changes
-
-If there were changes to the Razor grammar you'll need to update that as well. In the `vscode-csharp` repo you can do that by updating the `src/razor/syntaxes/aspnetcorerazor.tmLanguage.json` file, copying across the one from this repo.
 
 ## Testing
 

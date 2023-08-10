@@ -285,7 +285,7 @@
 
   <Target Name="_IncludeRazorGrammar" DependsOnTargets="PrepareForBuild;_BuildRazorGrammar" BeforeTargets="CoreCompile">
     <ItemGroup>
-      <Content Include="..\Microsoft.AspNetCore.Razor.VSCode.Extension\syntaxes\aspnetcorerazor.tmLanguage.json">
+      <Content Include="..\Microsoft.VisualStudio.RazorExtension\EmbeddedGrammars\aspnetcorerazor.tmLanguage.json">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         <IncludeInVSIX>true</IncludeInVSIX>
         <VSIXSubPath>Grammars\</VSIXSubPath>

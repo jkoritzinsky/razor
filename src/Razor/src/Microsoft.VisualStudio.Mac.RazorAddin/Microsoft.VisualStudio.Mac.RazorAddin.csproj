@@ -132,7 +132,7 @@
 
   <Target Name="_IncludeRazorGrammar" DependsOnTargets="PrepareForBuild;_BuildRazorGrammar" BeforeTargets="CoreCompile">
     <ItemGroup>
-      <MPackFile Include="..\Microsoft.AspNetCore.Razor.VSCode.Extension\syntaxes\aspnetcorerazor.tmLanguage.json">
+      <MPackFile Include="..\Microsoft.VisualStudio.RazorExtension\EmbeddedGrammars\aspnetcorerazor.tmLanguage.json">
         <Folder>Grammars</Folder>
       </MPackFile>
     </ItemGroup>
