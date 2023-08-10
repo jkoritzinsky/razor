@@ -279,11 +279,7 @@
     <_GeneratedVSIXBindingRedirectFile>$(IntermediateOutputPath)$(MSBuildProjectName).BindingRedirects.cs</_GeneratedVSIXBindingRedirectFile>
   </PropertyGroup>
 
-  <Target Name="_BuildRazorGrammar">
-    <MSBuild Projects="..\Microsoft.AspNetCore.Razor.VSCode.Extension\Microsoft.AspNetCore.Razor.VSCode.Extension.npmproj" Targets="Build" />
-  </Target>
-
-  <Target Name="_IncludeRazorGrammar" DependsOnTargets="PrepareForBuild;_BuildRazorGrammar" BeforeTargets="CoreCompile">
+  <Target Name="_IncludeRazorGrammar" BeforeTargets="CoreCompile">
     <ItemGroup>
       <Content Include="..\Microsoft.VisualStudio.RazorExtension\EmbeddedGrammars\aspnetcorerazor.tmLanguage.json">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
