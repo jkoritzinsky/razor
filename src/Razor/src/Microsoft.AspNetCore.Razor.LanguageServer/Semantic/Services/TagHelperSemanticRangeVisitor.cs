@@ -71,14 +71,14 @@ internal sealed class TagHelperSemanticRangeVisitor : SyntaxWalker
     {
         var legend = _razorSemanticTokensLegend;
 
-        Visit(node.NamePrefix);
+        //Visit(node.NamePrefix);
         AddSemanticRange(node.Name, legend.MarkupAttribute);
-        Visit(node.NameSuffix);
-        AddSemanticRange(node.EqualsToken, legend.MarkupOperator);
+        //Visit(node.NameSuffix);
+        //AddSemanticRange(node.EqualsToken, legend.MarkupOperator);
 
-        AddSemanticRange(node.ValuePrefix, legend.MarkupAttributeQuote);
+        //AddSemanticRange(node.ValuePrefix, legend.MarkupAttributeQuote);
         Visit(node.Value);
-        AddSemanticRange(node.ValueSuffix, legend.MarkupAttributeQuote);
+        //AddSemanticRange(node.ValueSuffix, legend.MarkupAttributeQuote);
     }
 
     public override void VisitMarkupStartTag(MarkupStartTagSyntax node)
@@ -91,21 +91,21 @@ internal sealed class TagHelperSemanticRangeVisitor : SyntaxWalker
         }
         else
         {
-            AddSemanticRange(node.OpenAngle, legend.MarkupTagDelimiter);
+            //AddSemanticRange(node.OpenAngle, legend.MarkupTagDelimiter);
             if (node.Bang != null)
             {
                 AddSemanticRange(node.Bang, legend.RazorTransition);
             }
 
-            AddSemanticRange(node.Name, legend.MarkupElement);
+            //AddSemanticRange(node.Name, legend.MarkupElement);
 
-            Visit(node.Attributes);
-            if (node.ForwardSlash != null)
-            {
-                AddSemanticRange(node.ForwardSlash, legend.MarkupTagDelimiter);
-            }
+            //Visit(node.Attributes);
+            //if (node.ForwardSlash != null)
+            //{
+            //    AddSemanticRange(node.ForwardSlash, legend.MarkupTagDelimiter);
+            //}
 
-            AddSemanticRange(node.CloseAngle, legend.MarkupTagDelimiter);
+            //AddSemanticRange(node.CloseAngle, legend.MarkupTagDelimiter);
         }
     }
 
@@ -119,20 +119,20 @@ internal sealed class TagHelperSemanticRangeVisitor : SyntaxWalker
         }
         else
         {
-            AddSemanticRange(node.OpenAngle, legend.MarkupTagDelimiter);
+            //AddSemanticRange(node.OpenAngle, legend.MarkupTagDelimiter);
             if (node.Bang != null)
             {
                 AddSemanticRange(node.Bang, legend.RazorTransition);
             }
 
-            if (node.ForwardSlash != null)
-            {
-                AddSemanticRange(node.ForwardSlash, legend.MarkupTagDelimiter);
-            }
+            //if (node.ForwardSlash != null)
+            //{
+            //    AddSemanticRange(node.ForwardSlash, legend.MarkupTagDelimiter);
+            //}
 
-            AddSemanticRange(node.Name, legend.MarkupElement);
+            //AddSemanticRange(node.Name, legend.MarkupElement);
 
-            AddSemanticRange(node.CloseAngle, legend.MarkupTagDelimiter);
+            //AddSemanticRange(node.CloseAngle, legend.MarkupTagDelimiter);
         }
     }
 
