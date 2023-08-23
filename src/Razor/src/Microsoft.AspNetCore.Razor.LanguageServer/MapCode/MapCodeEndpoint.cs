@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Language;
@@ -45,15 +46,16 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
         // Determine the language kind for each content to figure out which language server to delegate to
         foreach (var content in request.Contents)
         {
-            // TO-DO: Consider .razor vs .cshtml
-            var sourceDocument = RazorSourceDocument.Create(content, "File.razor");
+            var sourceDocument = context.DocumentContext.FilePath.EndsWith(".razor", StringComparison.Ordinal)
+                ? RazorSourceDocument.Create(content, "File.razor")
+                : RazorSourceDocument.Create(content, "File.cshtml");
+
             var codeDocument = RazorCodeDocument.Create(sourceDocument);
             var languageKind = _documentMappingService.GetLanguageKind(codeDocument, 0, rightAssociative: false);
 
             if (languageKind is RazorLanguageKind.Razor)
             {
-                // TO-DO: Handle Razor
-                return null;
+                await HandleRazorAsync(codeDocument, context.DocumentContext, changes, cancellationToken).ConfigureAwait(false);
             }
             else
             {
@@ -77,6 +79,20 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
 
         var workspaceEdits = new WorkspaceEdit { Changes = finalizedChanges };
         return workspaceEdits;
+    }
+
+    private static async Task HandleRazorAsync(
+        RazorCodeDocument codeDocument,
+        VersionedDocumentContext context,
+        Dictionary<string, List<TextEdit>> changes,
+        CancellationToken cancellationToken)
+    {
+        var syntaxTree = codeDocument.GetSyntaxTree();
+
+        // TO-DO: This is a work in progress. Eventually we want to do things like insert and replace components and TagHelpers.
+        // We'll implement this bit once the LSP client side is in so we can test while implementing.
+        var tagHelperContext = await context.GetTagHelperContextAsync(cancellationToken).ConfigureAwait(false);
+        var tagHelperNames = tagHelperContext.TagHelpers.Select(tagHelperContext => tagHelperContext.Name);
     }
 
     private async Task HandleDelegatedResponseAsync(WorkspaceEdit? edits, Dictionary<string, List<TextEdit>> changes, CancellationToken cancellationToken)
