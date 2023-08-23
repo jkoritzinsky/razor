@@ -34,6 +34,7 @@ internal static class CustomMessageNames
     public const string RazorFoldingRangeEndpoint = "razor/foldingRange";
     public const string RazorHtmlFormattingEndpoint = "razor/htmlFormatting";
     public const string RazorHtmlOnTypeFormattingEndpoint = "razor/htmlOnTypeFormatting";
+    public const string RazorMapCodeEndpoint = "razor/mapCode";
 
     // VS Windows only at the moment, but could/should be migrated
     public const string RazorDocumentSymbolEndpoint = "razor/documentSymbol";
