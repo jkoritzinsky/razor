@@ -51,10 +51,12 @@ public abstract class SemanticTokenTestBase : TagHelperServiceTestBase
 
     protected int BaselineTestCount { get; set; }
     protected int BaselineEditTestCount { get; set; }
+    protected bool UseRangesParams { get; set; }
 
-    protected SemanticTokenTestBase(ITestOutputHelper testOutput)
+    protected SemanticTokenTestBase(ITestOutputHelper testOutput, bool useRangesParams)
         : base(testOutput)
     {
+        UseRangesParams = useRangesParams;
     }
 
     protected void AssertSemanticTokensMatchesBaseline(SourceText sourceText, int[]? actualSemanticTokens)
@@ -96,9 +98,38 @@ public abstract class SemanticTokenTestBase : TagHelperServiceTestBase
         string documentText, Range razorRange, bool isRazorFile, int hostDocumentSyncVersion = 0)
     {
         var codeDocument = CreateCodeDocument(documentText, isRazorFile, DefaultTagHelpers);
-        var csharpRange = GetMappedCSharpRange(codeDocument, razorRange);
         var csharpTokens = Array.Empty<int>();
 
+        if (UseRangesParams)
+        {
+            var csharpRanges = GetMappedCSharpRanges(codeDocument, razorRange);
+            if (csharpRanges is not null)
+            {
+                var csharpDocumentUri = new Uri("C:\\TestSolution\\TestProject\\TestDocument.cs");
+                var csharpSourceText = codeDocument.GetCSharpSourceText();
+
+                await using var csharpServer = await CSharpTestLspServerHelpers.CreateCSharpLspServerAsync(
+                    csharpSourceText, csharpDocumentUri, SemanticTokensServerCapabilities, SpanMappingService, DisposalToken);
+
+                var responses = new SemanticTokens[csharpRanges.Length];
+                for (var i = 0; i < csharpRanges.Length; i++)
+                {
+                    var result = await csharpServer.ExecuteRequestAsync<SemanticTokensRangeParams, SemanticTokens>(
+                        Methods.TextDocumentSemanticTokensRangeName,
+                        CreateVSSemanticTokensRangeParams(csharpRanges[i], csharpDocumentUri),
+                        DisposalToken);
+
+                    responses[i] = result;
+                }
+
+                var responseData = responses.Select(r => r.Data).ToArray();
+                csharpTokens = StitchSemanticTokenResponsesTogether(responseData);
+            }
+
+            return new ProvideSemanticTokensResponse(tokens: csharpTokens, hostDocumentSyncVersion);
+        }
+
+        var csharpRange = GetMappedCSharpRange(codeDocument, razorRange);
         if (csharpRange is not null)
         {
             var csharpDocumentUri = new Uri("C:\\TestSolution\\TestProject\\TestDocument.cs");
@@ -114,8 +145,77 @@ public abstract class SemanticTokenTestBase : TagHelperServiceTestBase
             csharpTokens = result?.Data;
         }
 
-        var csharpResponse = new ProvideSemanticTokensResponse(tokens: csharpTokens, hostDocumentSyncVersion);
-        return csharpResponse;
+        return new ProvideSemanticTokensResponse(tokens: csharpTokens, hostDocumentSyncVersion);
+    }
+
+    // Duplicated from SemanticTokens.cs
+    private int[] StitchSemanticTokenResponsesTogether(int[][] responseData)
+    {
+        var count = responseData.Sum(r => r.Length);
+        var data = new int[count];
+        var dataIndex = 0;
+        var lastTokenLine = 0;
+
+        for (var i = 0; i < responseData.Length; i++)
+        {
+            var curData = responseData[i];
+
+            if (curData.Length == 0)
+            {
+                continue;
+            }
+
+            Array.Copy(curData, 0, data, dataIndex, curData.Length);
+            if (i != 0)
+            {
+                // The first two items in result.Data will potentially need it's line/col offset modified
+                var lineDelta = data[dataIndex] - lastTokenLine;
+
+                // Update the first line copied over from curData
+                data[dataIndex] = lineDelta;
+
+                // Update the first column copied over from curData if on the same line as the previous token
+                if (lineDelta == 0)
+                {
+                    var lastTokenCol = 0;
+
+                    // Walk back accumulating column deltas until we find a start column (indicated by it's line offset being non-zero)
+                    for (var j = dataIndex - RazorSemanticTokensInfoService.TokenSize; j >= 0; j -= RazorSemanticTokensInfoService.TokenSize)
+                    {
+                        lastTokenCol += data[dataIndex + 1];
+                        if (data[dataIndex] != 0)
+                        {
+                            break;
+                        }
+                    }
+
+                    data[dataIndex + 1] -= lastTokenCol;
+                }
+            }
+
+            lastTokenLine = 0;
+            for (var j = 0; j < curData.Length; j += RazorSemanticTokensInfoService.TokenSize)
+            {
+                lastTokenLine += curData[j];
+            }
+
+            dataIndex += curData.Length;
+        }
+
+        return data;
+    }
+
+    protected Range[]? GetMappedCSharpRanges(RazorCodeDocument codeDocument, Range razorRange)
+    {
+        var documentMappingService = new RazorDocumentMappingService(
+            TestLanguageServerFeatureOptions.Instance, new TestDocumentContextFactory(), LoggerFactory);
+        if (!RazorSemanticTokensInfoService.TryGetCSharpRanges(codeDocument, razorRange, out var csharpRanges))
+        {
+            // No C# in the range.
+            return null;
+        }
+
+        return csharpRanges;
     }
 
     protected Range? GetMappedCSharpRange(RazorCodeDocument codeDocument, Range razorRange)
@@ -158,7 +258,7 @@ public abstract class SemanticTokenTestBase : TagHelperServiceTestBase
         var prevLength = 0;
         var lineIndex = 0;
         var lineOffset = 0;
-        for (var i = 0; i < data.Length; i += 5)
+        for (var i = 0; i < data.Length; i += RazorSemanticTokensInfoService.TokenSize)
         {
             var lineDelta = data[i];
             var charDelta = data[i + 1];

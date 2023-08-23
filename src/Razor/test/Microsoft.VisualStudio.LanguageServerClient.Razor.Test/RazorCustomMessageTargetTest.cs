@@ -311,8 +311,10 @@ public class RazorCustomMessageTargetTest : TestBase
         Assert.Equal(expectedCodeAction.Title, result.Title);
     }
 
-    [Fact]
-    public async Task ProvideSemanticTokensAsync_CannotLookupDocument_ReturnsNullAsync()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProvideSemanticTokensAsync_CannotLookupDocument_ReturnsNullAsync(bool useRangesParams)
     {
         // Arrange
         LSPDocumentSnapshot document;
@@ -322,6 +324,26 @@ public class RazorCustomMessageTargetTest : TestBase
             .Returns(false);
         var documentSynchronizer = GetDocumentSynchronizer();
         var target = new RazorCustomMessageTarget(documentManager.Object, documentSynchronizer);
+
+        if (useRangesParams)
+        {
+            var requested = new ProvideSemanticTokensRangesParams(
+                textDocument: new TextDocumentIdentifier()
+                {
+                    Uri = new Uri("C:/path/to/file.razor")
+                },
+                requiredHostDocumentVersion: 1,
+                ranges: new[] { new Range() },
+                correlationId: Guid.Empty);
+
+            // Act
+            var actual = await target.ProvideSemanticTokensRangesAsync(requested, DisposalToken);
+
+            // Assert
+            Assert.Null(actual);
+            return;
+        }
+
         var request = new ProvideSemanticTokensRangeParams(
             textDocument: new TextDocumentIdentifier()
             {
@@ -338,8 +360,10 @@ public class RazorCustomMessageTargetTest : TestBase
         Assert.Null(result);
     }
 
-    [Fact]
-    public async Task ProvideSemanticTokensAsync_CannotLookupVirtualDocument_ReturnsNullAsync()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProvideSemanticTokensAsync_CannotLookupVirtualDocument_ReturnsNullAsyn(bool useRangesParams)
     {
         // Arrange
         var testDocUri = new Uri("C:/path/to/file.razor");
@@ -351,6 +375,26 @@ public class RazorCustomMessageTargetTest : TestBase
             .Returns(true);
         var documentSynchronizer = GetDocumentSynchronizer();
         var target = new RazorCustomMessageTarget(documentManager.Object, documentSynchronizer);
+
+        if (useRangesParams)
+        {
+            var requested = new ProvideSemanticTokensRangesParams(
+                textDocument: new TextDocumentIdentifier()
+                {
+                    Uri = new Uri("C:/path/to/file.razor")
+                },
+                requiredHostDocumentVersion: 0,
+                ranges: new[] { new Range() },
+                correlationId: Guid.Empty);
+
+            // Act
+            var actual = await target.ProvideSemanticTokensRangesAsync(requested, DisposalToken);
+
+            // Assert
+            Assert.Null(actual);
+            return;
+        }
+
         var request = new ProvideSemanticTokensRangeParams(
             textDocument: new TextDocumentIdentifier()
             {
@@ -367,8 +411,10 @@ public class RazorCustomMessageTargetTest : TestBase
         Assert.Null(result);
     }
 
-    [Fact]
-    public async Task ProvideSemanticTokensAsync_ReturnsSemanticTokensAsync()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProvideSemanticTokensAsync_ReturnsSemanticTokensAsync(bool useRangesParams)
     {
         // Arrange
         var testDocUri = new Uri("C:/path/to%20-%20project/file.razor");
@@ -411,6 +457,27 @@ public class RazorCustomMessageTargetTest : TestBase
         var target = new RazorCustomMessageTarget(
             documentManager.Object, JoinableTaskContext, requestInvoker.Object,
             TestFormattingOptionsProvider.Default, _editorSettingsManager, documentSynchronizer.Object, telemetryReporter.Object, outputWindowLogger);
+
+        if (useRangesParams)
+        {
+            var requested = new ProvideSemanticTokensRangesParams(
+                textDocument: new TextDocumentIdentifier()
+                {
+                    Uri = new Uri("C:/path/to%20-%20project/file.razor")
+                },
+                requiredHostDocumentVersion: 0,
+                ranges: new[] { new Range() },
+                correlationId: Guid.Empty);
+            var expected = new ProvideSemanticTokensResponse(expectedCSharpResults.Data, documentVersion);
+
+            // Act
+            var actual = await target.ProvideSemanticTokensRangesAsync(requested, DisposalToken);
+
+            // Assert
+            Assert.Equal(expected, actual);
+            return;
+        }
+
         var request = new ProvideSemanticTokensRangeParams(
             textDocument: new TextDocumentIdentifier()
             {
