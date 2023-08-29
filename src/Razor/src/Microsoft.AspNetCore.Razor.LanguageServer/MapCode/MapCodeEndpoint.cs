@@ -84,7 +84,9 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
     private static async Task HandleRazorAsync(
         RazorCodeDocument codeDocument,
         VersionedDocumentContext context,
+#pragma warning disable IDE0060 // Remove unused parameter
         Dictionary<string, List<TextEdit>> changes,
+#pragma warning restore IDE0060 // Remove unused parameter
         CancellationToken cancellationToken)
     {
         var syntaxTree = codeDocument.GetSyntaxTree();

@@ -5,6 +5,9 @@ using System.Runtime.Serialization;
 
 namespace Microsoft.VisualStudio.LanguageServer.Protocol;
 
+#pragma warning disable RS0016 // Add public types and members to the declared API
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+
 /// <summary>
 /// LSP Params for textDocument/mapCode calls.
 /// </summary>
@@ -50,3 +53,5 @@ public class MapCodeParams : ITextDocumentParams
         set;
     }
 }
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+#pragma warning restore RS0016 // Add public types and members to the declared API
