@@ -544,14 +544,7 @@ internal sealed class TagHelperSemanticRangeVisitor : SyntaxWalker
                         continue;
                     }
 
-                    var endPosition = new Position(lineNumber, endChar);
-                    var lineRange = new Range
-                    {
-                        Start = startPosition,
-                        End = endPosition
-                    };
-                    var semantic = new SemanticRange(semanticKind, lineRange, tokenModifier, fromRazor: true);
-                    AddRange(semantic);
+                    TryAddRange(semanticKind, startPosition, lineNumber, endChar, tokenModifier, fromRazor: true);
                 }
             }
             else
@@ -566,24 +559,14 @@ internal sealed class TagHelperSemanticRangeVisitor : SyntaxWalker
                     {
                         var tokenRange = token.GetRange(source);
 
-                        var semantic = new SemanticRange(semanticKind, tokenRange, tokenModifier, fromRazor: true);
-                        AddRange(semantic);
+                        TryAddRange(semanticKind, tokenRange, tokenModifier, fromRazor: true);
                     }
                 }
             }
         }
         else
         {
-            var semanticRange = new SemanticRange(semanticKind, range, tokenModifier, fromRazor: true);
-            AddRange(semanticRange);
-        }
-
-        void AddRange(SemanticRange semanticRange)
-        {
-            if (semanticRange.Range.Start != semanticRange.Range.End)
-            {
-                _semanticRanges.Add(semanticRange);
-            }
+            TryAddRange(semanticKind, range, tokenModifier, fromRazor: true);
         }
 
         static int GetLastNonWhitespaceCharacterOffset(RazorSourceDocument source, int lineStartAbsoluteIndex, int lineLength)
@@ -600,6 +583,28 @@ internal sealed class TagHelperSemanticRangeVisitor : SyntaxWalker
             return source[lineEndAbsoluteIndex - 1] is '\n' or '\r'
                 ? lineLength - 1
                 : lineLength;
+        }
+    }
+
+    private void TryAddRange(int kind, Position startPosition, int endLine, int endCharacter, int modifier, bool fromRazor)
+    {
+        if (startPosition.Character != endCharacter || startPosition.Line != endLine)
+        {
+            var semanticRange = new SemanticRange(kind, new Range
+            {
+                Start = startPosition,
+                End = new Position(endLine, endCharacter)
+            }, modifier, fromRazor);
+            _semanticRanges.Add(semanticRange);
+        }
+    }
+
+    private void TryAddRange(int kind, Range range, int modifier, bool fromRazor)
+    {
+        if (range.Start != range.End)
+        {
+            var semanticRange = new SemanticRange(kind, range, modifier, fromRazor);
+            _semanticRanges.Add(semanticRange);
         }
     }
 
