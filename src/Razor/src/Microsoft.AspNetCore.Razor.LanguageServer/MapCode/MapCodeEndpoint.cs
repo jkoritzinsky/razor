@@ -3,10 +3,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.LanguageServer.Common;
 using Microsoft.AspNetCore.Razor.LanguageServer.EndpointContracts;
 using Microsoft.AspNetCore.Razor.LanguageServer.Protocol;
@@ -15,14 +13,15 @@ using Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace Microsoft.AspNetCore.Razor.LanguageServer.MapCode;
 
-// TO-DO: Change to constant once LSP client implementation is merged
-[LanguageServerEndpoint("textDocument/mapCode")]
+[LanguageServerEndpoint(MapperMethods.TextDocumentMapCodeName)]
 internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, WorkspaceEdit?>
 {
     private readonly IRazorDocumentMappingService _documentMappingService;
     private readonly ClientNotifierServiceBase _languageServer;
 
-    public MapCodeEndpoint(IRazorDocumentMappingService documentMappingService, ClientNotifierServiceBase languageServer)
+    public MapCodeEndpoint(
+        IRazorDocumentMappingService documentMappingService,
+        ClientNotifierServiceBase languageServer)
     {
         _documentMappingService = documentMappingService ?? throw new ArgumentNullException(nameof(documentMappingService));
         _languageServer = languageServer ?? throw new ArgumentNullException(nameof(languageServer));
@@ -39,62 +38,96 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
             return null;
         }
 
-        // TO-DO: Apply Updates to workspace before doing anything below
-
-        var changes = new Dictionary<string, List<TextEdit>>();
-
-        // Determine the language kind for each content to figure out which language server to delegate to
-        foreach (var content in request.Contents)
+        // TO-DO: Apply Updates to the workspace before doing mapping. This is currently unsupported until we determine the
+        // types of updates the client sends us.
+        if (request.Updates is not null)
         {
-            var sourceDocument = context.DocumentContext.FilePath.EndsWith(".razor", StringComparison.Ordinal)
-                ? RazorSourceDocument.Create(content, "File.razor")
-                : RazorSourceDocument.Create(content, "File.cshtml");
-
-            var codeDocument = RazorCodeDocument.Create(sourceDocument);
-            var languageKind = _documentMappingService.GetLanguageKind(codeDocument, 0, rightAssociative: false);
-
-            if (languageKind is RazorLanguageKind.Razor)
-            {
-                await HandleRazorAsync(codeDocument, context.DocumentContext, changes, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                // Have C# and HTML handle the mapping instead.
-                var delegatedRequest = new DelegatedMapCodeParams(context.DocumentContext.Identifier, languageKind, [content]);
-
-                var edits = await _languageServer.SendRequestAsync<DelegatedMapCodeParams, WorkspaceEdit?>(
-                    CustomMessageNames.RazorMapCodeEndpoint,
-                    delegatedRequest,
-                    cancellationToken).ConfigureAwait(false);
-
-                await HandleDelegatedResponseAsync(edits, changes, cancellationToken).ConfigureAwait(false);
-            }
+            return null;
         }
 
-        var finalizedChanges = new Dictionary<string, TextEdit[]>();
-        foreach (var change in changes)
+        // We need focus locations to be able to determine which language server to delegate to. If we don't have them, return.
+        if (request.FocusLocations is null || request.FocusLocations.Length == 0)
         {
-            finalizedChanges.Add(change.Key, change.Value.ToArray());
+            return null;
         }
 
-        var workspaceEdits = new WorkspaceEdit { Changes = finalizedChanges };
-        return workspaceEdits;
+        // We'll go through the focus locations (which are sorted in priority order) and see if we can map any of them successfully.
+        foreach (var focusLocation in request.FocusLocations)
+        {
+            var location = focusLocation.Location;
+            if (location is null || location.Uri != context.Uri)
+            {
+                continue;
+            }
+
+            var documentPositionInfo = await DefaultDocumentPositionInfoStrategy.Instance.TryGetPositionInfoAsync(
+                _documentMappingService,
+                context.DocumentContext,
+                location.Range.Start,
+                context.Logger,
+                cancellationToken).ConfigureAwait(false);
+
+            if (documentPositionInfo is null)
+            {
+                continue;
+            }
+
+            var codeDocument = await context.DocumentContext.GetCodeDocumentAsync(cancellationToken).ConfigureAwait(false);
+            var changes = new Dictionary<string, List<TextEdit>>();
+
+            foreach (var content in request.Contents)
+            {
+                if (documentPositionInfo.LanguageKind is RazorLanguageKind.Razor)
+                {
+                    await HandleRazorAsync(content, context.DocumentContext, changes, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    // Have C# and HTML handle the mapping instead.
+                    var delegatedRequest = new DelegatedMapCodeParams(context.DocumentContext.Identifier, documentPositionInfo.LanguageKind, [content]);
+
+                    var edits = await _languageServer.SendRequestAsync<DelegatedMapCodeParams, WorkspaceEdit?>(
+                        CustomMessageNames.RazorMapCodeEndpoint,
+                        delegatedRequest,
+                        cancellationToken).ConfigureAwait(false);
+
+                    await HandleDelegatedResponseAsync(edits, changes, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            // At least one change failed to map. Let's try using a different focus location.
+            if (changes.Count != request.Contents.Length)
+            {
+                continue;
+            }
+
+            var finalizedChanges = new Dictionary<string, TextEdit[]>();
+            foreach (var change in changes)
+            {
+                finalizedChanges.Add(change.Key, [.. change.Value]);
+            }
+
+            var workspaceEdits = new WorkspaceEdit { Changes = finalizedChanges };
+            return workspaceEdits;
+        }
+
+        // We couldn't map the contents to locations.
+        return null;
     }
 
-    private static async Task HandleRazorAsync(
-        RazorCodeDocument codeDocument,
-        VersionedDocumentContext context,
+    // Handles Razor code mapping. These various heuristics will evolve over time as we encounter more user scenarios.
 #pragma warning disable IDE0060 // Remove unused parameter
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+    private static async Task HandleRazorAsync(
+        string content,
+        VersionedDocumentContext context,
         Dictionary<string, List<TextEdit>> changes,
-#pragma warning restore IDE0060 // Remove unused parameter
         CancellationToken cancellationToken)
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+#pragma warning restore IDE0060 // Remove unused parameter
     {
-        var syntaxTree = codeDocument.GetSyntaxTree();
-
-        // TO-DO: This is a work in progress. Eventually we want to do things like insert and replace components and TagHelpers.
-        // We'll implement this bit once the LSP client side is in so we can test while implementing.
-        var tagHelperContext = await context.GetTagHelperContextAsync(cancellationToken).ConfigureAwait(false);
-        var tagHelperNames = tagHelperContext.TagHelpers.Select(tagHelperContext => tagHelperContext.Name);
+        // TO-DO: Fill this in. Currently, it seems like the only Razor edits we're receiving are full document changes, so
+        // we can't do much here. Once we're sent Razor snippets, we can do more here.
     }
 
     private async Task HandleDelegatedResponseAsync(WorkspaceEdit? edits, Dictionary<string, List<TextEdit>> changes, CancellationToken cancellationToken)
@@ -117,14 +150,14 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
 
             foreach (var documentEdit in edit.Value)
             {
-                var (mappedDocumentUri, mappedRange) = await _documentMappingService.MapToHostDocumentUriAndRangeAsync(
+                var (hostDocumentUri, hostDocumentRange) = await _documentMappingService.MapToHostDocumentUriAndRangeAsync(
                     generatedUri, documentEdit.Range, cancellationToken).ConfigureAwait(false);
 
-                if (mappedDocumentUri != generatedUri)
+                if (hostDocumentUri != generatedUri)
                 {
                     var textEdit = new TextEdit
                     {
-                        Range = mappedRange,
+                        Range = hostDocumentRange,
                         NewText = documentEdit.NewText
                     };
 

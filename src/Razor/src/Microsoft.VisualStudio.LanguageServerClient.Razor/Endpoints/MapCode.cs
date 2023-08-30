@@ -30,12 +30,21 @@ internal partial class RazorCustomMessageTarget
         };
 
         var textBuffer = delegationDetails.Value.TextBuffer;
-        var response = await _requestInvoker.ReinvokeRequestOnServerAsync<MapCodeParams, WorkspaceEdit?>(
-            textBuffer,
-            "textDocument/mapCode",
-            delegationDetails.Value.LanguageServerName,
-            mapCodeParams,
-            cancellationToken).ConfigureAwait(false);
-        return response?.Response;
+
+        try
+        {
+            var response = await _requestInvoker.ReinvokeRequestOnServerAsync<MapCodeParams, WorkspaceEdit?>(
+                textBuffer,
+                MapperMethods.TextDocumentMapCodeName,
+                delegationDetails.Value.LanguageServerName,
+                mapCodeParams,
+                cancellationToken).ConfigureAwait(false);
+            return response?.Response;
+        }
+        catch (RemoteMethodNotFoundException)
+        {
+            // C# and/or HTML haven't implemented handlers yet.
+            return null;
+        }
     }
 }
