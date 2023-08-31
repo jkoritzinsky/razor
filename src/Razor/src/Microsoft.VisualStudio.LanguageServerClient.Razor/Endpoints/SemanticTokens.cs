@@ -84,6 +84,7 @@ internal partial class RazorCustomMessageTarget
 
         var results = await Task.WhenAll(requestTasks).ConfigureAwait(false);
         var nonEmptyResults = results.Select(r => r?.Response?.Data).WithoutNull().ToArray();
+        // does it always have to be the same length?
         if (nonEmptyResults.Length != semanticTokensParams.Ranges.Length)
         {
             // Weren't able to re-invoke C# semantic tokens but we have to indicate it's due to out of sync by providing the old version
