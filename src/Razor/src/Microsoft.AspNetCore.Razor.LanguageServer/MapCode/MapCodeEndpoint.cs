@@ -3,11 +3,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.LanguageServer.Common;
 using Microsoft.AspNetCore.Razor.LanguageServer.EndpointContracts;
 using Microsoft.AspNetCore.Razor.LanguageServer.Protocol;
+using Microsoft.CodeAnalysis.Razor.ProjectSystem;
+using Microsoft.CodeAnalysis.Razor.Workspaces.Extensions;
 using Microsoft.CommonLanguageServerProtocol.Framework;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 
@@ -44,6 +48,25 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
         {
             return null;
         }
+
+        var (projectEngine, importSources) = await InitializeProjectEngineAsync(context.DocumentContext.Snapshot).ConfigureAwait(false);
+        var tagHelperContext =  await context.DocumentContext.GetTagHelperContextAsync(cancellationToken).ConfigureAwait(false);
+        var fileKind = FileKinds.GetFileKindFromFilePath(context.DocumentContext.FilePath);
+        var extension = Path.GetExtension(context.DocumentContext.FilePath);
+
+        foreach (var content in request.Contents)
+        {
+            if (content is null)
+            {
+                continue;
+            }
+
+            var sourceDocument = RazorSourceDocument.Create(content, "Test" + extension);
+            var codeDocument = projectEngine.Process(sourceDocument, fileKind, importSources, tagHelperContext.TagHelpers);
+            var syntaxTree = codeDocument.GetSyntaxTree();
+        }
+
+        // TO-DO: (allichou): Revise the below logic
 
         // We need focus locations to be able to determine which language server to delegate to. If we don't have them, return.
         if (request.FocusLocations is null || request.FocusLocations.Length == 0)
@@ -165,5 +188,21 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
                 }
             }
         }
+    }
+
+    private static async Task<(RazorProjectEngine projectEngine, List<RazorSourceDocument> importSources)> InitializeProjectEngineAsync(IDocumentSnapshot originalSnapshot)
+    {
+        var engine = originalSnapshot.Project.GetProjectEngine();
+        var importSources = new List<RazorSourceDocument>();
+
+        var imports = originalSnapshot.GetImports();
+        foreach (var import in imports)
+        {
+            var sourceText = await import.GetTextAsync().ConfigureAwait(false);
+            var source = sourceText.GetRazorSourceDocument(import.FilePath, import.TargetPath);
+            importSources.Add(source);
+        }
+
+        return (engine, importSources);
     }
 }
