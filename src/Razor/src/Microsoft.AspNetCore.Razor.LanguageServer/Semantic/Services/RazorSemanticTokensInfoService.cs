@@ -315,6 +315,11 @@ internal class RazorSemanticTokensInfoService : IRazorSemanticTokensInfoService
             {
                 _logger.LogWarning("Didn't get C# tokens because the virtual document wasn't found, or other problem. We were wanting {documentVersion} but C# could not get any version.", documentVersion);
             }
+            else if (csharpVersion == -5)
+            {
+                _logger.LogDebug("Response is coming from VS Code and we expect nothing returned");
+                return Array.Empty<int>();
+            }
             else if (csharpVersion < documentVersion)
             {
                 _logger.LogDebug("Didn't wait for Roslyn to get the C# version we were expecting. We are wanting {documentVersion} but C# is at {csharpVersion}.", documentVersion, csharpVersion);
