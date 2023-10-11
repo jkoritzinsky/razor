@@ -2,25 +2,13 @@
 // Licensed under the MIT license. See License.txt in the project root for license information.
 
 using System;
+using Microsoft.AspNetCore.Razor;
 using Microsoft.AspNetCore.Razor.Language;
 
 namespace Microsoft.CodeAnalysis.Razor.Tooltip;
 
-internal record BoundAttributeDescriptionInfo
+internal record BoundAttributeDescriptionInfo(string ReturnTypeName, string TypeName, string PropertyName, string? Documentation = null)
 {
-    public string ReturnTypeName { get; }
-    public string TypeName { get; }
-    public string PropertyName { get; }
-    public string Documentation { get; }
-
-    public BoundAttributeDescriptionInfo(string returnTypeName, string typeName, string propertyName, string documentation)
-    {
-        ReturnTypeName = returnTypeName ?? throw new ArgumentNullException(nameof(returnTypeName));
-        TypeName = typeName ?? throw new ArgumentNullException(nameof(typeName));
-        PropertyName = propertyName ?? throw new ArgumentNullException(nameof(propertyName));
-        Documentation = documentation ?? string.Empty;
-    }
-
     public static BoundAttributeDescriptionInfo From(BoundAttributeParameterDescriptor parameterAttribute, string parentTagHelperTypeName)
     {
         if (parameterAttribute is null)
@@ -42,17 +30,17 @@ internal record BoundAttributeDescriptionInfo
             parameterAttribute.Documentation);
     }
 
-    public static BoundAttributeDescriptionInfo From(BoundAttributeDescriptor boundAttribute, bool indexer)
-        => From(boundAttribute, indexer, parentTagHelperTypeName: null);
+    public static BoundAttributeDescriptionInfo From(BoundAttributeDescriptor boundAttribute, bool isIndexer)
+        => From(boundAttribute, isIndexer, parentTagHelperTypeName: null);
 
-    public static BoundAttributeDescriptionInfo From(BoundAttributeDescriptor boundAttribute, bool indexer, string? parentTagHelperTypeName)
+    public static BoundAttributeDescriptionInfo From(BoundAttributeDescriptor boundAttribute, bool isIndexer, string? parentTagHelperTypeName)
     {
         if (boundAttribute is null)
         {
             throw new ArgumentNullException(nameof(boundAttribute));
         }
 
-        var returnTypeName = indexer ? boundAttribute.IndexerTypeName : boundAttribute.TypeName;
+        var returnTypeName = isIndexer ? boundAttribute.IndexerTypeName.AssumeNotNull() : boundAttribute.TypeName;
         var propertyName = boundAttribute.GetPropertyName();
 
         // The BoundAttributeDescriptor does not directly have the TagHelperTypeName information available.
@@ -67,7 +55,7 @@ internal record BoundAttributeDescriptionInfo
     }
 
     // Internal for testing
-    internal static string ResolveTagHelperTypeName(string propertyName, string displayName)
+    internal static string ResolveTagHelperTypeName(string propertyName, string? displayName)
     {
         // A BoundAttributeDescriptor does not have a direct reference to its parent TagHelper.
         // However, when it was constructed the parent TagHelper's type name was embedded into
