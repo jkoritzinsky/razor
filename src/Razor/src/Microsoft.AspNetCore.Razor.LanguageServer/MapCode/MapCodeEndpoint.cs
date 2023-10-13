@@ -4,44 +4,51 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.LanguageServer.Common;
 using Microsoft.AspNetCore.Razor.LanguageServer.EndpointContracts;
 using Microsoft.AspNetCore.Razor.LanguageServer.Protocol;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
 using Microsoft.CodeAnalysis.Razor.Workspaces.Extensions;
 using Microsoft.CommonLanguageServerProtocol.Framework;
-using Microsoft.VisualStudio.LanguageServer.Protocol;
+using LSP = Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace Microsoft.AspNetCore.Razor.LanguageServer.MapCode;
 
-[LanguageServerEndpoint(MapperMethods.TextDocumentMapCodeName)]
-internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, WorkspaceEdit?>
+[LanguageServerEndpoint(LSP.MapperMethods.WorkspaceMapCodeName)]
+internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.MapCodeParams, LSP.WorkspaceEdit?>
 {
     private readonly IRazorDocumentMappingService _documentMappingService;
+    private readonly DocumentContextFactory _documentContextFactory;
     private readonly ClientNotifierServiceBase _languageServer;
+
+    private readonly InsertMapperHelper _insertHelper;
+    //private readonly ReplaceMapperHelper _replaceHelper;
 
     public MapCodeEndpoint(
         IRazorDocumentMappingService documentMappingService,
+        DocumentContextFactory documentContextFactory,
         ClientNotifierServiceBase languageServer)
     {
         _documentMappingService = documentMappingService ?? throw new ArgumentNullException(nameof(documentMappingService));
+        _documentContextFactory = documentContextFactory ?? throw new ArgumentNullException(nameof(documentContextFactory));
         _languageServer = languageServer ?? throw new ArgumentNullException(nameof(languageServer));
+
+        _insertHelper = new InsertMapperHelper();
+        //_replaceHelper = new ReplaceMapperHelper();
     }
 
     public bool MutatesSolutionState => false;
 
-    public TextDocumentIdentifier GetTextDocumentIdentifier(MapCodeParams request) => request.TextDocument;
-
-    public async Task<WorkspaceEdit?> HandleRequestAsync(MapCodeParams request, RazorRequestContext context, CancellationToken cancellationToken)
+    public async Task<LSP.WorkspaceEdit?> HandleRequestAsync(
+        LSP.MapCodeParams request,
+        RazorRequestContext context,
+        CancellationToken cancellationToken)
     {
-        if (context.DocumentContext is null)
-        {
-            return null;
-        }
-
         // TO-DO: Apply Updates to the workspace before doing mapping. This is currently unsupported until we determine the
         // types of updates the client sends us.
         if (request.Updates is not null)
@@ -49,111 +56,186 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
             return null;
         }
 
-        var (projectEngine, importSources) = await InitializeProjectEngineAsync(context.DocumentContext.Snapshot).ConfigureAwait(false);
-        var tagHelperContext =  await context.DocumentContext.GetTagHelperContextAsync(cancellationToken).ConfigureAwait(false);
-        var fileKind = FileKinds.GetFileKindFromFilePath(context.DocumentContext.FilePath);
-        var extension = Path.GetExtension(context.DocumentContext.FilePath);
-
-        foreach (var content in request.Contents)
+        var changes = new Dictionary<string, List<LSP.TextEdit>>();
+        foreach (var mapping in request.Mappings)
         {
-            if (content is null)
+            if (mapping.TextDocument is null || mapping.FocusLocations is null)
             {
                 continue;
             }
 
-            var sourceDocument = RazorSourceDocument.Create(content, "Test" + extension);
-            var codeDocument = projectEngine.Process(sourceDocument, fileKind, importSources, tagHelperContext.TagHelpers);
-            var syntaxTree = codeDocument.GetSyntaxTree();
-        }
-
-        // TO-DO: (allichou): Revise the below logic
-
-        // We need focus locations to be able to determine which language server to delegate to. If we don't have them, return.
-        if (request.FocusLocations is null || request.FocusLocations.Length == 0)
-        {
-            return null;
-        }
-
-        // We'll go through the focus locations (which are sorted in priority order) and see if we can map any of them successfully.
-        foreach (var focusLocation in request.FocusLocations)
-        {
-            var location = focusLocation.Location;
-            if (location is null || location.Uri != context.Uri)
+            var documentContext = _documentContextFactory.TryCreateForOpenDocument(mapping.TextDocument.Uri);
+            if (documentContext is null)
             {
                 continue;
             }
 
-            var documentPositionInfo = await DefaultDocumentPositionInfoStrategy.Instance.TryGetPositionInfoAsync(
-                _documentMappingService,
-                context.DocumentContext,
-                location.Range.Start,
-                context.Logger,
-                cancellationToken).ConfigureAwait(false);
+            var (projectEngine, importSources) = await InitializeProjectEngineAsync(documentContext.Snapshot).ConfigureAwait(false);
+            var tagHelperContext =  await documentContext.GetTagHelperContextAsync(cancellationToken).ConfigureAwait(false);
+            var fileKind = FileKinds.GetFileKindFromFilePath(documentContext.FilePath);
+            var extension = Path.GetExtension(documentContext.FilePath);
 
-            if (documentPositionInfo is null)
+            foreach (var content in mapping.Contents)
             {
-                continue;
-            }
-
-            var codeDocument = await context.DocumentContext.GetCodeDocumentAsync(cancellationToken).ConfigureAwait(false);
-            var changes = new Dictionary<string, List<TextEdit>>();
-
-            foreach (var content in request.Contents)
-            {
-                if (documentPositionInfo.LanguageKind is RazorLanguageKind.Razor)
+                if (content is null)
                 {
-                    await HandleRazorAsync(content, context.DocumentContext, changes, cancellationToken).ConfigureAwait(false);
+                    continue;
                 }
-                else
+
+                var sourceDocument = RazorSourceDocument.Create(content, "Test" + extension);
+                var codeDocument = projectEngine.Process(sourceDocument, fileKind, importSources, tagHelperContext.TagHelpers);
+                var languageKind = _documentMappingService.GetLanguageKind(codeDocument, hostDocumentIndex: 0, rightAssociative: true);
+
+                // If content is C# or HTML, delegate to their respective language servers.
+                if (languageKind is RazorLanguageKind.CSharp || languageKind is RazorLanguageKind.Html)
                 {
                     // Have C# and HTML handle the mapping instead.
-                    var delegatedRequest = new DelegatedMapCodeParams(context.DocumentContext.Identifier, documentPositionInfo.LanguageKind, [content]);
+                    var delegatedRequest = new DelegatedMapCodeParams(
+                        documentContext.Identifier,
+                        languageKind,
+                        [content],
+                        // TO-DO: Account for focus locations.
+                        FocusLocations: []);
 
-                    var edits = await _languageServer.SendRequestAsync<DelegatedMapCodeParams, WorkspaceEdit?>(
+                    var edits = await _languageServer.SendRequestAsync<DelegatedMapCodeParams, LSP.WorkspaceEdit?>(
                         CustomMessageNames.RazorMapCodeEndpoint,
                         delegatedRequest,
                         cancellationToken).ConfigureAwait(false);
 
                     await HandleDelegatedResponseAsync(edits, changes, cancellationToken).ConfigureAwait(false);
                 }
+                else
+                {
+                    // Otherwise we're in a Razor context and need to map the code ourselves.
+                    await HandleRazorAsync(codeDocument, mapping.FocusLocations, changes, cancellationToken).ConfigureAwait(false);
+                }
             }
-
-            // At least one change failed to map. Let's try using a different focus location.
-            if (changes.Count != request.Contents.Length)
-            {
-                continue;
-            }
-
-            var finalizedChanges = new Dictionary<string, TextEdit[]>();
-            foreach (var change in changes)
-            {
-                finalizedChanges.Add(change.Key, [.. change.Value]);
-            }
-
-            var workspaceEdits = new WorkspaceEdit { Changes = finalizedChanges };
-            return workspaceEdits;
         }
 
-        // We couldn't map the contents to locations.
-        return null;
+        var finalizedChanges = new Dictionary<string, LSP.TextEdit[]>();
+        foreach (var change in changes)
+        {
+            finalizedChanges.Add(change.Key, [.. change.Value]);
+        }
+
+        var workspaceEdits = new LSP.WorkspaceEdit { Changes = finalizedChanges };
+        return workspaceEdits;
     }
 
-    // Handles Razor code mapping. These various heuristics will evolve over time as we encounter more user scenarios.
-#pragma warning disable IDE0060 // Remove unused parameter
-#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-    private static async Task HandleRazorAsync(
-        string content,
-        VersionedDocumentContext context,
-        Dictionary<string, List<TextEdit>> changes,
+    private async Task HandleRazorAsync(
+        RazorCodeDocument codeDocument,
+        LSP.Location[][] locations,
+        Dictionary<string, List<LSP.TextEdit>> changes,
         CancellationToken cancellationToken)
-#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
-#pragma warning restore IDE0060 // Remove unused parameter
     {
-        // TO-DO: Fill this in. Currently, it seems like the only Razor edits we're receiving are full document changes, so
-        // we can't do much here. Once we're sent Razor snippets, we can do more here.
+        var syntaxTree = codeDocument.GetSyntaxTree();
+        if (syntaxTree is null)
+        {
+            return;
+        }
+
+        var sourceNodes = NodeHelper.ExtractSourceNodes(syntaxTree.Root);
+        if (sourceNodes.Count == 0)
+        {
+            return;
+        }
+
+        // Mixed scoped types nodes are unsupported
+        if (sourceNodes.Any(sn => sn is RazorSimpleNode) && sourceNodes.Any(sn => sn is RazorScopedNode))
+        {
+            return;
+        }
+
+        var edits = await this.MapInternalAsync(locations, sourceNodes.ToArray(), cancellationToken).ConfigureAwait(false);
+        foreach (var edit in edits)
+        {
+            if (!changes.TryGetValue(edit.Uri.AbsolutePath, out var textEdits))
+            {
+                textEdits = new List<LSP.TextEdit>();
+                changes[edit.Uri.AbsolutePath] = textEdits;
+            }
+
+            textEdits.Add(edit.TextEdit);
+        }
     }
 
-    private async Task HandleDelegatedResponseAsync(WorkspaceEdit? edits, Dictionary<string, List<TextEdit>> changes, CancellationToken cancellationToken)
+    /// <summary>
+    /// Maps a given syntax node from code generated by the AI,
+    /// to a given or existing snapshot.
+    /// </summary>
+    private async Task<MappedEdit[]> MapInternalAsync(
+        LSP.Location[][] locations,
+        RazorSourceNode[] sourceNodes,
+        CancellationToken cancellationToken)
+    {
+        foreach (var locationByPriority in locations)
+        {
+            foreach (var location in locationByPriority)
+            {
+                var documentContext = _documentContextFactory.TryCreate(location.Uri);
+                if (documentContext is null)
+                {
+                    continue;
+                }
+
+                var syntaxTree = await documentContext.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
+                if (syntaxTree is null)
+                {
+                    continue;
+                }
+
+                //var mapperHelper = this.GetMapperHelper(sourceNodes, syntaxTree.Root);
+
+                // If no insertion found is valid, skip this focus location.
+                //if (!mapperHelper.TryGetValidInsertions(syntaxTree.Root, sourceNodes, out var validInsertionNodes, out var invalidInsertions))
+                //{
+                //    continue;
+                //}
+
+                // Replace does not support more than one node.
+                /*if (mapperHelper is ReplaceMapperHelper && sourceNodes.Length > 1)
+                {
+                    continue;
+                }*/
+
+                var mappedEdits = new List<MappedEdit>();
+                foreach (var sourceNode in sourceNodes)
+                {
+                    // TO-DO
+                }
+
+                //// Merge edits when mapping has determined an insert.
+                //// This is a hotfix for now, because we don't have a way to handle multiple insertion nodes yet.
+                //// So this should help mitigate the issue we were seeing when we tried to insert more than one source node.
+                //if (mapperHelper is InsertMapperHelper && mappedEdits.Count > 1)
+                //{
+                //    mappedEdits = new List<MappedEdit> { MappedEdit.MergeEdits(mappedEdits.ToArray()) };
+                //}
+
+                return mappedEdits.ToArray();
+            }
+        }
+
+        return [];
+    }
+
+    /*private ICodeMapperHelper GetMapperHelper(RazorSourceNode[] insertions, Language.Syntax.SyntaxNode target)
+    {
+        foreach (var insertion in insertions)
+        {
+            if (insertion.ExistsOnTarget(target, out _))
+            {
+                return _replaceHelper;
+            }
+        }
+
+        return _insertHelper;
+    }*/
+
+    private async Task HandleDelegatedResponseAsync(
+        LSP.WorkspaceEdit? edits,
+        Dictionary<string, List<LSP.TextEdit>> changes,
+        CancellationToken cancellationToken)
     {
         if (edits is null || edits.Changes is null)
         {
@@ -167,7 +249,7 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
             var docChanges = changes[edit.Key];
             if (docChanges is null)
             {
-                docChanges = new List<TextEdit>();
+                docChanges = [];
                 changes[edit.Key] = docChanges;
             }
 
@@ -178,7 +260,7 @@ internal sealed class MapCodeEndpoint : IRazorRequestHandler<MapCodeParams, Work
 
                 if (hostDocumentUri != generatedUri)
                 {
-                    var textEdit = new TextEdit
+                    var textEdit = new LSP.TextEdit
                     {
                         Range = hostDocumentRange,
                         NewText = documentEdit.NewText
