@@ -8,9 +8,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Language;
-using Microsoft.AspNetCore.Razor.LanguageServer.Common;
+using Microsoft.AspNetCore.Razor.Language.Syntax;
 using Microsoft.AspNetCore.Razor.LanguageServer.EndpointContracts;
-using Microsoft.AspNetCore.Razor.LanguageServer.Protocol;
+using Microsoft.AspNetCore.Razor.LanguageServer.Extensions;
+using Microsoft.AspNetCore.Razor.LanguageServer.MapCode.Mappers;
+using Microsoft.AspNetCore.Razor.LanguageServer.MapCode.SourceNode;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
 using Microsoft.CodeAnalysis.Razor.Workspaces.Extensions;
@@ -26,9 +28,6 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
     private readonly DocumentContextFactory _documentContextFactory;
     private readonly ClientNotifierServiceBase _languageServer;
 
-    private readonly InsertMapperHelper _insertHelper;
-    //private readonly ReplaceMapperHelper _replaceHelper;
-
     public MapCodeEndpoint(
         IRazorDocumentMappingService documentMappingService,
         DocumentContextFactory documentContextFactory,
@@ -37,9 +36,6 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
         _documentMappingService = documentMappingService ?? throw new ArgumentNullException(nameof(documentMappingService));
         _documentContextFactory = documentContextFactory ?? throw new ArgumentNullException(nameof(documentContextFactory));
         _languageServer = languageServer ?? throw new ArgumentNullException(nameof(languageServer));
-
-        _insertHelper = new InsertMapperHelper();
-        //_replaceHelper = new ReplaceMapperHelper();
     }
 
     public bool MutatesSolutionState => false;
@@ -84,31 +80,10 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
 
                 var sourceDocument = RazorSourceDocument.Create(content, "Test" + extension);
                 var codeDocument = projectEngine.Process(sourceDocument, fileKind, importSources, tagHelperContext.TagHelpers);
-                var languageKind = _documentMappingService.GetLanguageKind(codeDocument, hostDocumentIndex: 0, rightAssociative: true);
 
-                // If content is C# or HTML, delegate to their respective language servers.
-                if (languageKind is RazorLanguageKind.CSharp || languageKind is RazorLanguageKind.Html)
-                {
-                    // Have C# and HTML handle the mapping instead.
-                    var delegatedRequest = new DelegatedMapCodeParams(
-                        documentContext.Identifier,
-                        languageKind,
-                        [content],
-                        // TO-DO: Account for focus locations.
-                        FocusLocations: []);
-
-                    var edits = await _languageServer.SendRequestAsync<DelegatedMapCodeParams, LSP.WorkspaceEdit?>(
-                        CustomMessageNames.RazorMapCodeEndpoint,
-                        delegatedRequest,
-                        cancellationToken).ConfigureAwait(false);
-
-                    await HandleDelegatedResponseAsync(edits, changes, cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    // Otherwise we're in a Razor context and need to map the code ourselves.
-                    await HandleRazorAsync(codeDocument, mapping.FocusLocations, changes, cancellationToken).ConfigureAwait(false);
-                }
+                // TO-DO: Handle delegation once we know exactly what we need to delegate.
+                // For now, just let Razor handle everything.
+                await HandleRazorAsync(codeDocument, mapping.FocusLocations, changes, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -134,7 +109,7 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
             return;
         }
 
-        var sourceNodes = NodeHelper.ExtractSourceNodes(syntaxTree.Root);
+        var sourceNodes = syntaxTree.Root.ExtractSourceNodes();
         if (sourceNodes.Count == 0)
         {
             return;
@@ -146,26 +121,13 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
             return;
         }
 
-        var edits = await this.MapInternalAsync(locations, sourceNodes.ToArray(), cancellationToken).ConfigureAwait(false);
-        foreach (var edit in edits)
-        {
-            if (!changes.TryGetValue(edit.Uri.AbsolutePath, out var textEdits))
-            {
-                textEdits = new List<LSP.TextEdit>();
-                changes[edit.Uri.AbsolutePath] = textEdits;
-            }
-
-            textEdits.Add(edit.TextEdit);
-        }
+        await MapCodeAsync(locations, [.. sourceNodes], changes, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Maps a given syntax node from code generated by the AI,
-    /// to a given or existing snapshot.
-    /// </summary>
-    private async Task<MappedEdit[]> MapInternalAsync(
+    private async Task MapCodeAsync(
         LSP.Location[][] locations,
         RazorSourceNode[] sourceNodes,
+        Dictionary<string, List<LSP.TextEdit>> changes,
         CancellationToken cancellationToken)
     {
         foreach (var locationByPriority in locations)
@@ -184,89 +146,82 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
                     continue;
                 }
 
-                //var mapperHelper = this.GetMapperHelper(sourceNodes, syntaxTree.Root);
-
-                // If no insertion found is valid, skip this focus location.
-                //if (!mapperHelper.TryGetValidInsertions(syntaxTree.Root, sourceNodes, out var validInsertionNodes, out var invalidInsertions))
-                //{
-                //    continue;
-                //}
-
-                // Replace does not support more than one node.
-                /*if (mapperHelper is ReplaceMapperHelper && sourceNodes.Length > 1)
-                {
-                    continue;
-                }*/
-
-                var mappedEdits = new List<MappedEdit>();
+                var replace = false;
                 foreach (var sourceNode in sourceNodes)
                 {
-                    // TO-DO
+                    if (sourceNode.ExistsOnTarget(syntaxTree.Root, out _))
+                    {
+                        replace = true;
+                        break;
+                    }
                 }
 
-                //// Merge edits when mapping has determined an insert.
-                //// This is a hotfix for now, because we don't have a way to handle multiple insertion nodes yet.
-                //// So this should help mitigate the issue we were seeing when we tried to insert more than one source node.
-                //if (mapperHelper is InsertMapperHelper && mappedEdits.Count > 1)
-                //{
-                //    mappedEdits = new List<MappedEdit> { MappedEdit.MergeEdits(mappedEdits.ToArray()) };
-                //}
-
-                return mappedEdits.ToArray();
-            }
-        }
-
-        return [];
-    }
-
-    /*private ICodeMapperHelper GetMapperHelper(RazorSourceNode[] insertions, Language.Syntax.SyntaxNode target)
-    {
-        foreach (var insertion in insertions)
-        {
-            if (insertion.ExistsOnTarget(target, out _))
-            {
-                return _replaceHelper;
-            }
-        }
-
-        return _insertHelper;
-    }*/
-
-    private async Task HandleDelegatedResponseAsync(
-        LSP.WorkspaceEdit? edits,
-        Dictionary<string, List<LSP.TextEdit>> changes,
-        CancellationToken cancellationToken)
-    {
-        if (edits is null || edits.Changes is null)
-        {
-            return;
-        }
-
-        // Map code back to Razor
-        foreach (var edit in edits.Changes)
-        {
-            var generatedUri = new Uri(edit.Key);
-            var docChanges = changes[edit.Key];
-            if (docChanges is null)
-            {
-                docChanges = [];
-                changes[edit.Key] = docChanges;
-            }
-
-            foreach (var documentEdit in edit.Value)
-            {
-                var (hostDocumentUri, hostDocumentRange) = await _documentMappingService.MapToHostDocumentUriAndRangeAsync(
-                    generatedUri, documentEdit.Range, cancellationToken).ConfigureAwait(false);
-
-                if (hostDocumentUri != generatedUri)
+                if (replace)
                 {
-                    var textEdit = new LSP.TextEdit
+                    // Try to see if we can replace instead of insert.
+                    if (!ReplaceMapper.TryGetValidReplacementNodes(syntaxTree.Root, sourceNodes, out var validReplacements, out var invalidReplacements))
                     {
-                        Range = hostDocumentRange,
-                        NewText = documentEdit.NewText
-                    };
+                        continue;
+                    }
 
-                    docChanges.Add(textEdit);
+                    // Replace does not support more than one node.
+                    if (sourceNodes.Length > 1)
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    // We couldn't find a valid replace location. Try inserting instead.
+                    if (!InsertMapper.TryGetValidInsertions(syntaxTree.Root, sourceNodes, out var validInsertions, out var invalidMappedNodes))
+                    {
+                        continue;
+                    }
+                }
+
+                if (!changes.TryGetValue(documentContext.Uri.AbsolutePath, out var textEdits))
+                {
+                    textEdits = [];
+                    changes[documentContext.Uri.AbsolutePath] = textEdits;
+                }
+
+                var sourceText = await documentContext.Snapshot.GetTextAsync().ConfigureAwait(false);
+
+                foreach (var sourceNode in sourceNodes)
+                {
+                    if (replace)
+                    {
+                        // by default we assume the insertion or replacement will be the full syntax node.
+                        var insertion = sourceNode.ToFullString();
+                    }
+                    else
+                    {
+                        var insertionSpan = InsertMapper.GetInsertionPoint(syntaxTree.Root, sourceNode, location);
+                        if (insertionSpan is not null)
+                        {
+                            var textSpan = new TextSpan(insertionSpan.Value, 0);
+                            var edit = new LSP.TextEdit { NewText = sourceNode.ToFullString(), Range = textSpan.ToRange(sourceText) };
+                            textEdits.Add(edit);
+                        }
+                    }
+
+                    // When calculating the insert span, the insert text might suffer adjustments.
+                    // These adjustments will be visible in the adjustedInsertion, if it's not null that means
+                    // there were adjustments to the text when calculating the insert spans.
+
+                    /*var insertionSpan = mapperHelper.GetInsertSpan(documentRoot, validInsertion, target, out var adjustedInsertion);
+                    if (adjustedInsertion is not null)
+                    {
+                        insertion = adjustedInsertion;
+                    }
+
+                    if (insertionSpan is not null)
+                    {
+                        var snapshotSpan = GetSnapshotSpan(snapshot, insertionSpan.Value);
+                        var edit = new TextEdit(insertion, snapshotSpan);
+                        var mappedEdit = new MappedEdit(edit, uri);
+                        mappedEdits.Add(mappedEdit);
+                    }*/
                 }
             }
         }

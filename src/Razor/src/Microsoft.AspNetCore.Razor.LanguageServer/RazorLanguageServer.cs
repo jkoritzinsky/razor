@@ -205,8 +205,6 @@ internal class RazorLanguageServer : AbstractLanguageServer<RazorRequestContext>
             services.AddHandlerWithCapabilities<FindAllReferencesEndpoint>();
             services.AddHandlerWithCapabilities<ProjectContextsEndpoint>();
             services.AddHandlerWithCapabilities<DocumentSymbolEndpoint>();
-
-            // TO-DO: Once LSP client side is in, change this to AddHandlerWithCapabilities
             services.AddHandler<MapCodeEndpoint>();
         }
     }

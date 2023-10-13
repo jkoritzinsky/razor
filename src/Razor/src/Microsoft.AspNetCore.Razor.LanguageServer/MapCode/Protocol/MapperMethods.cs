@@ -1,20 +1,19 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the MIT license. See License.txt in the project root for license information.
 
-namespace Microsoft.VisualStudio.LanguageServer.Protocol
+namespace Microsoft.VisualStudio.LanguageServer.Protocol;
+
+/// <summary>
+/// Class which contains the string values for CodeMapper-related LSP messages.
+/// </summary>
+internal static class MapperMethods
 {
     /// <summary>
-    /// Class which contains the string values for CodeMapper-related LSP messages.
+    /// Method name for 'workspace/mapCode'.
     /// </summary>
-    public static class MapperMethods
-    {
-        /// <summary>
-        /// Method name for 'textDocument/mapCode'.
-        /// </summary>
-        public const string TextDocumentMapCodeName = "textDocument/mapCode";
-
-        /// <summary>
-        /// Strongly typed message object for 'textDocument/mapCode'
-        /// </summary>
-        public readonly static LspRequest<MapCodeParams, WorkspaceEdit?> TextDocumentMapCode = new(TextDocumentMapCodeName);
-    }
+    public const string WorkspaceMapCodeName = "workspace/mapCode";
+    /// <summary>
+    /// Strongly typed message object for 'workspace/mapCode'
+    /// </summary>
+    public readonly static LspRequest<MapCodeParams, WorkspaceEdit?> WorkspaceMapCode = new(WorkspaceMapCodeName);
 }

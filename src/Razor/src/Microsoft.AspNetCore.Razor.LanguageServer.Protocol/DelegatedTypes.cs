@@ -52,7 +52,8 @@ internal record DelegatedCompletionParams(
 internal record DelegatedMapCodeParams(
     TextDocumentIdentifierAndVersion Identifier,
     RazorLanguageKind ProjectedKind,
-    string[] Contents) : IDelegatedParams;
+    string[] Contents,
+    Location[][] FocusLocations) : IDelegatedParams;
 
 internal record DelegatedCompletionResolutionContext(
     DelegatedCompletionParams OriginalRequestParams,

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>$(DefaultNetFxTargetFramework)</TargetFramework>
 
-    <VSSDKTargetPlatformRegRootSuffix>RoslynDev</VSSDKTargetPlatformRegRootSuffix>
+    <VSSDKTargetPlatformRegRootSuffix>Exp</VSSDKTargetPlatformRegRootSuffix>
 
     <!-- Required to run the project localy -->
     <StartArguments>/rootsuffix $(VSSDKTargetPlatformRegRootSuffix) /log</StartArguments>

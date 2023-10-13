@@ -23,10 +23,16 @@ internal partial class RazorCustomMessageTarget
             return null;
         }
 
-        var mapCodeParams = new MapCodeParams()
+        var mappings = new MapCodeMapping()
         {
             TextDocument = request.Identifier.TextDocumentIdentifier.WithUri(delegationDetails.Value.ProjectedUri),
-            Contents = request.Contents
+            Contents = request.Contents,
+            FocusLocations = request.FocusLocations
+        };
+
+        var mapCodeParams = new MapCodeParams()
+        {
+            Mappings = [mappings]
         };
 
         var textBuffer = delegationDetails.Value.TextBuffer;
@@ -35,7 +41,7 @@ internal partial class RazorCustomMessageTarget
         {
             var response = await _requestInvoker.ReinvokeRequestOnServerAsync<MapCodeParams, WorkspaceEdit?>(
                 textBuffer,
-                MapperMethods.TextDocumentMapCodeName,
+                MapperMethods.WorkspaceMapCodeName,
                 delegationDetails.Value.LanguageServerName,
                 mapCodeParams,
                 cancellationToken).ConfigureAwait(false);

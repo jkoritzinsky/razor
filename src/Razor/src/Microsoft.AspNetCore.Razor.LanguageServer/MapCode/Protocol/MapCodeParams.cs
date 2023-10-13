@@ -1,59 +1,32 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the MIT license. See License.txt in the project root for license information.
 
 using System.Runtime.Serialization;
 
-namespace Microsoft.VisualStudio.LanguageServer.Protocol
+namespace Microsoft.VisualStudio.LanguageServer.Protocol;
+
+/// <summary>
+/// LSP Params for textDocument/mapCode calls.
+/// </summary>
+[DataContract]
+internal class MapCodeParams
 {
     /// <summary>
-    /// LSP Params for textDocument/mapCode calls.
+    /// Set of code blocks, associated with documents and regions, to map.
     /// </summary>
-    [DataContract]
-    public class MapCodeParams : ITextDocumentParams
+    [DataMember(Name = "mappings")]
+#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+    public MapCodeMapping[] Mappings { get; set; }
+#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+
+    /// <summary>
+    /// Changes that should be applied to the workspace by the mapper before performing
+    /// the mapping operation.
+    /// </summary>
+    [DataMember(Name = "updates")]
+    public WorkspaceEdit? Updates
     {
-        /// <summary>
-        /// Identifier for the document the contents are supposed to be mapped into.
-        /// </summary>
-        [DataMember(Name = "textDocument")]
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public TextDocumentIdentifier TextDocument
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        {
-            get;
-            set;
-        }
-
-        /// <summary>
-        /// Strings of code/text to map into TextDocument.
-        /// </summary>
-        [DataMember(Name = "contents")]
-#pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        public string[] Contents
-#pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-        {
-            get;
-            set;
-        }
-
-        /// <summary>
-        /// Prioritized Locations to be used when applying heuristics. For example, cursor location,
-        /// related classes (in other documents), viewport, etc.
-        /// </summary>
-        [DataMember(Name = "focusLocations")]
-        public MapCodeFocusLocation[]? FocusLocations
-        {
-            get;
-            set;
-        }
-
-        /// <summary>
-        /// Changes that should be applied to the workspace by the mapper before performing
-        /// the mapping operation.
-        /// </summary>
-        [DataMember(Name = "updates")]
-        public WorkspaceEdit? Updates
-        {
-            get;
-            set;
-        }
+        get;
+        set;
     }
 }
