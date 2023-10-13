@@ -41,13 +41,7 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
                 """;
 
         var codeToMap = """
-            <h3>Component</h3>
             <PageTitle>Title</PageTitle>
-
-            @code {
-
-            }
-            
             """;
 
         var expectedEdit = new WorkspaceEdit

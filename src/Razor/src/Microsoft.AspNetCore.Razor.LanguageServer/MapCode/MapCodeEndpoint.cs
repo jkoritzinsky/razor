@@ -158,7 +158,6 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
 
                 if (replace)
                 {
-                    // Try to see if we can replace instead of insert.
                     if (!ReplaceMapper.TryGetValidReplacementNodes(syntaxTree.Root, sourceNodes, out var validReplacements, out var invalidReplacements))
                     {
                         continue;
@@ -172,7 +171,6 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
                 }
                 else
                 {
-                    // We couldn't find a valid replace location. Try inserting instead.
                     if (!InsertMapper.TryGetValidInsertions(syntaxTree.Root, sourceNodes, out var validInsertions, out var invalidMappedNodes))
                     {
                         continue;
@@ -193,6 +191,11 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
                     {
                         // by default we assume the insertion or replacement will be the full syntax node.
                         var insertion = sourceNode.ToFullString();
+                        var replacementSpan = ReplaceMapper.GetReplacementSpan(syntaxTree.Root, sourceNode, location, out var adjustedInsertion);
+                        if (replacementSpan is not null)
+                        {
+                            // TO-DO: Fill this in
+                        }
                     }
                     else
                     {
@@ -204,24 +207,6 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
                             textEdits.Add(edit);
                         }
                     }
-
-                    // When calculating the insert span, the insert text might suffer adjustments.
-                    // These adjustments will be visible in the adjustedInsertion, if it's not null that means
-                    // there were adjustments to the text when calculating the insert spans.
-
-                    /*var insertionSpan = mapperHelper.GetInsertSpan(documentRoot, validInsertion, target, out var adjustedInsertion);
-                    if (adjustedInsertion is not null)
-                    {
-                        insertion = adjustedInsertion;
-                    }
-
-                    if (insertionSpan is not null)
-                    {
-                        var snapshotSpan = GetSnapshotSpan(snapshot, insertionSpan.Value);
-                        var edit = new TextEdit(insertion, snapshotSpan);
-                        var mappedEdit = new MappedEdit(edit, uri);
-                        mappedEdits.Add(mappedEdit);
-                    }*/
                 }
             }
         }

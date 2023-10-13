@@ -3,7 +3,9 @@
 
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Razor.Language.Syntax;
+using Microsoft.AspNetCore.Razor.LanguageServer.Extensions;
 using Microsoft.AspNetCore.Razor.LanguageServer.MapCode.SourceNode;
+using Microsoft.CodeAnalysis.Text;
 using LSP = Microsoft.VisualStudio.LanguageServer.Protocol;
 
 namespace Microsoft.AspNetCore.Razor.LanguageServer.MapCode.Mappers;
@@ -47,12 +49,13 @@ internal static class InsertMapper
 
     public static int? GetInsertionPoint(
         SyntaxNode documentRoot,
+        SourceText sourceText,
         RazorSourceNode nodeToInsert,
         LSP.Location focusArea)
     {
         // If there's an specific focus area, or caret provided, we should try to insert as close as possible.
         // As long as the focused area is not empty.
-        if (TryGetFocusedInsertionPoint(focusArea, documentRoot, nodeToInsert, out var focusedInsertionPoint))
+        if (TryGetFocusedInsertionPoint(focusArea, documentRoot, sourceText, nodeToInsert, out var focusedInsertionPoint))
         {
             return focusedInsertionPoint;
         }
@@ -71,17 +74,20 @@ internal static class InsertMapper
     private static bool TryGetFocusedInsertionPoint(
         LSP.Location focusArea,
         SyntaxNode documentRoot,
+        SourceText sourceText,
         RazorSourceNode insertion,
         out int insertionPoint)
     {
         // If there's an specific focus area, or caret provided, we should try to insert as close as possible.
-        // As long as the focused area is not empty.
+        // TO-DO: Fill this in
+
         insertionPoint = 0;
         return true;
     }
 
     private static bool TryGetDefaultInsertionPoint(SyntaxNode node, out int insertionPoint)
     {
+        // Our default insertion point is at the end of the document.
         insertionPoint = 0;
         return true;
     }
