@@ -55,14 +55,12 @@ internal static class InsertMapper
     {
         // If there's an specific focus area, or caret provided, we should try to insert as close as possible.
         // As long as the focused area is not empty.
-        if (TryGetFocusedInsertionPoint(focusArea, documentRoot, sourceText, nodeToInsert, out var focusedInsertionPoint))
+        if (TryGetFocusedInsertionPoint(focusArea, sourceText, out var focusedInsertionPoint))
         {
             return focusedInsertionPoint;
         }
 
-        // Fallback: Attempt to infer the insertion point without a caret or line.
-        // This will attempt to get a default insertion point for the insert node within the
-        // current document.
+        // Fallback: Attempt to infer the insertion point without a valid focus area.
         if (TryGetDefaultInsertionPoint(documentRoot, out var defaultInsertionPoint))
         {
             return defaultInsertionPoint;
@@ -73,15 +71,27 @@ internal static class InsertMapper
 
     private static bool TryGetFocusedInsertionPoint(
         LSP.Location focusArea,
-        SyntaxNode documentRoot,
         SourceText sourceText,
-        RazorSourceNode insertion,
         out int insertionPoint)
     {
         // If there's an specific focus area, or caret provided, we should try to insert as close as possible.
-        // TO-DO: Fill this in
 
-        insertionPoint = 0;
+        // We currently only support 0-length focus areas.
+        if (focusArea.Range.Start != focusArea.Range.End)
+        {
+            insertionPoint = 0;
+            return false;
+        }
+
+        // Verify that the focus area is within the document.
+        if (focusArea.Range.Start.Line >= sourceText.Lines.Count ||
+            (focusArea.Range.Start.Line == sourceText.Lines.Count - 1 && focusArea.Range.Start.Character > sourceText.Lines[focusArea.Range.Start.Line].Span.Length))
+        {
+            insertionPoint = 0;
+            return false;
+        }
+
+        insertionPoint = focusArea.Range.ToTextSpan(sourceText).Start;
         return true;
     }
 

@@ -199,7 +199,7 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
                     }
                     else
                     {
-                        var insertionSpan = InsertMapper.GetInsertionPoint(syntaxTree.Root, sourceNode, location);
+                        var insertionSpan = InsertMapper.GetInsertionPoint(syntaxTree.Root,sourceText, sourceNode, location);
                         if (insertionSpan is not null)
                         {
                             var textSpan = new TextSpan(insertionSpan.Value, 0);

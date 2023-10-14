@@ -4,6 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.LanguageServer.Common;
@@ -33,11 +35,11 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
     {
         var originalCode = """
                 <h3>Component</h3>
-
+                $$
                 @code {
 
                 }
-                $$
+                
                 """;
 
         var codeToMap = """
@@ -66,7 +68,7 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
             }
         };
 
-        await VerifyCodeMappingAsync(originalCode, new[] { codeToMap }, expectedEdit);
+        await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
     }
 
     private async Task VerifyCodeMappingAsync(string originalCode, string[] codeToMap, LSP.WorkspaceEdit expectedEdit, string razorFilePath = RazorFilePath)
@@ -125,7 +127,9 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
         var result = await endpoint.HandleRequestAsync(request, requestContext, DisposalToken);
 
         // Assert
-        Assert.Equal(expectedEdit, result);
+
+        // TextEdit doesn't define an equals comparer, so we need to pass in a custom comparer.
+        Assert.Equal(expectedEdit, result, new WorkspaceEditComparer());
     }
 
     private class MapCodeServer : ClientNotifierServiceBase
@@ -184,5 +188,62 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
 
             return (TResponse)(object)result;
         }
+    }
+
+    private class WorkspaceEditComparer : IEqualityComparer<WorkspaceEdit?>
+    {
+        public bool Equals(WorkspaceEdit? x, WorkspaceEdit? y)
+        {
+            if (x!.Changes is not null || y!.Changes is not null)
+            {
+                foreach (var doc in x!.Changes!.Keys)
+                {
+                    var xEdits = x!.Changes[doc];
+                    var yEdits = y!.Changes![doc];
+                    if (!xEdits.SequenceEqual(yEdits, new TextEditComparer()))
+                    {
+                        return false;
+                    }
+                }
+
+                foreach (var doc in y!.Changes!.Keys)
+                {
+                    var xEdits = x!.Changes![doc];
+                    var yEdits = y!.Changes![doc];
+                    if (!xEdits.SequenceEqual(yEdits, new TextEditComparer()))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            return x.Equals(y);
+        }
+
+        public int GetHashCode([DisallowNull] WorkspaceEdit? obj)
+            => throw new NotImplementedException();
+    }
+
+    private class TextEditComparer : IEqualityComparer<TextEdit>
+    {
+        public bool Equals(TextEdit? x, TextEdit? y)
+        {
+            if (x?.NewText != y?.NewText)
+            {
+                return false;
+            }
+
+            if (x?.Range != y?.Range)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        public int GetHashCode([DisallowNull] TextEdit obj)
+            => throw new NotImplementedException();
     }
 }
