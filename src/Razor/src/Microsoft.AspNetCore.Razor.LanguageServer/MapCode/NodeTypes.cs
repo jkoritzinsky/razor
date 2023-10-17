@@ -23,7 +23,7 @@ internal static class NodeTypes
     /// </summary>
     public static IReadOnlyDictionary<Scope, Type[]> Scoped = new Dictionary<Scope, Type[]>
     {
-        [Scope.CSharpExpression] = [
+        [Scope.Expression] = [
             typeof(CSharpExplicitExpressionSyntax),
             typeof(CSharpImplicitExpressionSyntax),
             typeof(CSharpStatementSyntax),
@@ -46,8 +46,8 @@ internal static class NodeTypes
 
         // Markup
         typeof(MarkupEphemeralTextLiteralSyntax),
+        typeof(MarkupElementSyntax),
         typeof(MarkupTagHelperElementSyntax),
         typeof(MarkupTextLiteralSyntax),
-        typeof(MarkupElementSyntax),
     ];
 }

@@ -71,6 +71,46 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
         await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
     }
 
+    [Fact]
+    public async Task HandleRazorReplacementAsync()
+    {
+        var originalCode = """
+                Test
+                $$
+                """;
+
+        var codeToMap = """
+            Test
+            Test2
+            Test3
+
+            """;
+
+        var expectedEdit = new WorkspaceEdit
+        {
+            Changes = new Dictionary<string, TextEdit[]>
+            {
+                {
+                    RazorFilePath,
+                    new TextEdit[]
+                    {
+                        new()
+                        {
+                            NewText = "<PageTitle>Title</PageTitle>",
+                            Range = new Range
+                            {
+                                Start = new Position(1, 0),
+                                End = new Position(1, 0)
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
+    }
+
     private async Task VerifyCodeMappingAsync(string originalCode, string[] codeToMap, LSP.WorkspaceEdit expectedEdit, string razorFilePath = RazorFilePath)
     {
         // Arrange
@@ -92,8 +132,7 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
 
         var mappings = new MapCodeMapping[]
         {
-            new MapCodeMapping
-            {
+            new() {
                 TextDocument = new TextDocumentIdentifier
                 {
                     Uri = new Uri(razorFilePath)

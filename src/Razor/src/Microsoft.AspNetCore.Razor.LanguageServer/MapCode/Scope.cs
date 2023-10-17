@@ -17,5 +17,5 @@ namespace Microsoft.AspNetCore.Razor.LanguageServer.MapCode;
 internal enum Scope
 {
     Unknown,
-    CSharpExpression
+    Expression
 }

@@ -78,12 +78,15 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
                     continue;
                 }
 
+                // We create a new Razor file based on each mapping's content in order to get the syntax tree that we'll later use to map.
                 var sourceDocument = RazorSourceDocument.Create(content, "Test" + extension);
-                var codeDocument = projectEngine.Process(sourceDocument, fileKind, importSources, tagHelperContext.TagHelpers);
+                var codeToMap = projectEngine.Process(sourceDocument, fileKind, importSources, tagHelperContext.TagHelpers);
 
-                // TO-DO: Handle delegation once we know exactly what we need to delegate.
+                // TO-DO: Handle delegation to C#/HTML once:
+                //   (1) we know exactly what heuristics we want to use to delegate, and
+                //   (2) C#/HTML implement their code mappers.
                 // For now, just let Razor handle everything.
-                await HandleRazorAsync(codeDocument, mapping.FocusLocations, changes, cancellationToken).ConfigureAwait(false);
+                await HandleRazorAsync(codeToMap, mapping.FocusLocations, changes, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -98,12 +101,12 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
     }
 
     private async Task HandleRazorAsync(
-        RazorCodeDocument codeDocument,
+        RazorCodeDocument codeToMap,
         LSP.Location[][] locations,
         Dictionary<string, List<LSP.TextEdit>> changes,
         CancellationToken cancellationToken)
     {
-        var syntaxTree = codeDocument.GetSyntaxTree();
+        var syntaxTree = codeToMap.GetSyntaxTree();
         if (syntaxTree is null)
         {
             return;

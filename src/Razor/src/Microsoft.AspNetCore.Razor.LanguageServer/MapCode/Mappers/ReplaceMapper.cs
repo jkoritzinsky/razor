@@ -18,16 +18,16 @@ internal static class ReplaceMapper
     {
         var validNodes = new List<RazorSourceNode>();
         var invalidNodes = new List<InvalidMappedNode>();
-        foreach (var sourecNode in sourceNodes)
+        foreach (var sourceNode in sourceNodes)
         {
             // For replace we'll validate nodes that already exist in the given target.
-            if (sourecNode.ExistsOnTarget(target, out var matchingNode))
+            if (sourceNode.ExistsOnTarget(target, out var matchingNode))
             {
-                validNodes.Add(sourecNode);
+                validNodes.Add(sourceNode);
             }
             else
             {
-                invalidNodes.Add(new InvalidMappedNode(sourecNode, InvalidMappedNodeReason.ReplaceIdentifierMissingOnTarget));
+                invalidNodes.Add(new InvalidMappedNode(sourceNode, InvalidMappedNodeReason.ReplaceIdentifierMissingOnTarget));
             }
         }
 
