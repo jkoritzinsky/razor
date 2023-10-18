@@ -177,8 +177,15 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
                             didCalculateCSharpFocusLocations = true;
                         }
 
-                        await SendCSharpDelegatedMappingRequestAsync(
+                        var csharpMappingSuccessful = await SendCSharpDelegatedMappingRequestAsync(
                             documentContext.Identifier, csharpBody, csharpFocusLocations, changes, cancellationToken).ConfigureAwait(false);
+                        if (!csharpMappingSuccessful)
+                        {
+                            // An error occurred during C# mapping. Let the client handle the mapping.
+                            changes.Clear();
+                            return;
+                        }
+
                         continue;
                     }
 
@@ -273,7 +280,7 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
         typeof(RazorDirectiveSyntax),
     ];
 
-    private async Task SendCSharpDelegatedMappingRequestAsync(
+    private async Task<bool> SendCSharpDelegatedMappingRequestAsync(
         TextDocumentIdentifierAndVersion textDocumentIdentifier,
         SyntaxNode nodeToMap,
         LSP.Location[][] focusLocations,
@@ -296,14 +303,17 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
         } catch
         {
             // C# hasn't implemented + merged their C# code mapper yet.
+            return true;
         }
 
         if (edits is null)
         {
-            return;
+            // It's likely an error occurred during C# mapping.
+            return false;
         }
 
         await HandleDelegatedResponseAsync(edits, changes, cancellationToken).ConfigureAwait(false);
+        return true;
     }
 
     private async Task<LSP.Location[][]> GetCSharpFocusLocationsAsync(LSP.Location[][] focusLocations, CancellationToken cancellationToken)

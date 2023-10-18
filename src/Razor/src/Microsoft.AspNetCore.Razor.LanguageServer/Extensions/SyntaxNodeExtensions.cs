@@ -412,10 +412,36 @@ internal static class SyntaxNodeExtensions
     {
         csharpCodeBlock = null;
 
+        if (node is CSharpCodeBlockSyntax outerCSharpCodeBlock)
+        {
+            var innerCsharpStatement = outerCSharpCodeBlock.ChildNodes().FirstOrDefault(n => n is CSharpStatementSyntax);
+            if (innerCsharpStatement is not null)
+            {
+                return innerCsharpStatement.IsCSharpNode(out csharpCodeBlock);
+            }
+
+            var innerRazorDirective = outerCSharpCodeBlock.ChildNodes().FirstOrDefault(n => n is RazorDirectiveSyntax);
+            if (innerRazorDirective is not null)
+            {
+                return innerRazorDirective.IsCSharpNode(out csharpCodeBlock);
+            }
+
+            var innerCSharpExplicitExpression = outerCSharpCodeBlock.ChildNodes().FirstOrDefault(n => n is CSharpExplicitExpressionSyntax);
+            if (innerCSharpExplicitExpression is not null)
+            {
+                return innerCSharpExplicitExpression.IsCSharpNode(out csharpCodeBlock);
+            }
+
+            var innerCSharpImplicitExpression = outerCSharpCodeBlock.ChildNodes().FirstOrDefault(n => n is CSharpImplicitExpressionSyntax);
+            if (innerCSharpImplicitExpression is not null)
+            {
+                return innerCSharpImplicitExpression.IsCSharpNode(out csharpCodeBlock);
+            }
+        }
         // @code {
         //    var foo = "bar";
         // }
-        if (node is RazorDirectiveSyntax razorDirective)
+        else if (node is RazorDirectiveSyntax razorDirective)
         {
             // code {
             //    var foo = "bar";
@@ -434,26 +460,6 @@ internal static class SyntaxNodeExtensions
                 {
                     csharpCodeBlock = innerCodeBlock as CSharpCodeBlockSyntax;
                 }
-            }
-        }
-        // @{
-        //    var x = 1;
-        // }
-        else if (node is CSharpCodeBlockSyntax outerCSharpCodeBlock)
-        {
-            // @{
-            //    var x = 1;
-            // }
-            var csharpStatement = outerCSharpCodeBlock.ChildNodes().FirstOrDefault(n => n is CSharpStatementSyntax);
-            if (csharpStatement is not null)
-            {
-                // {
-                //    var x = 1;
-                // }
-                var csharpStatementBody = ((CSharpStatementSyntax)csharpStatement).Body;
-
-                // var x = 1;
-                csharpCodeBlock = csharpStatementBody.ChildNodes().FirstOrDefault(n => n is CSharpCodeBlockSyntax) as CSharpCodeBlockSyntax;
             }
         }
         // @(x)
@@ -476,6 +482,19 @@ internal static class SyntaxNodeExtensions
                 // x
                 csharpCodeBlock = csharpImplicitExpressionBody.CSharpCode;
             }
+        }
+        // @{
+        //    var x = 1;
+        // }
+        else if (node is CSharpStatementSyntax csharpStatement)
+        {
+            // {
+            //    var x = 1;
+            // }
+            var csharpStatementBody = csharpStatement.Body;
+
+            // var x = 1;
+            csharpCodeBlock = csharpStatementBody.ChildNodes().FirstOrDefault(n => n is CSharpCodeBlockSyntax) as CSharpCodeBlockSyntax;
         }
 
         return csharpCodeBlock is not null;
