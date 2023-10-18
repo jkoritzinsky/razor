@@ -408,26 +408,76 @@ internal static class SyntaxNodeExtensions
         return node;
     }
 
-    public static bool IsCSharpNode(this SyntaxNode node, [NotNullWhen(true)] out CSharpSyntaxNode? csharpBody)
+    public static bool IsCSharpNode(this SyntaxNode node, [NotNullWhen(true)] out CSharpCodeBlockSyntax? csharpCodeBlock)
     {
-        csharpBody = null;
+        csharpCodeBlock = null;
+
+        // @code {
+        //    var foo = "bar";
+        // }
         if (node is RazorDirectiveSyntax razorDirective)
         {
-            csharpBody = razorDirective.Body;
+            // code {
+            //    var foo = "bar";
+            // }
+            var razorDirectiveBody = razorDirective.Body as RazorDirectiveBodySyntax;
+            if (razorDirectiveBody is not null)
+            {
+                // {
+                //    var foo = "bar";
+                // }
+                csharpCodeBlock = razorDirectiveBody.CSharpCode;
+
+                // var foo = "bar";
+                var innerCodeBlock = csharpCodeBlock.ChildNodes().FirstOrDefault(n => n is CSharpCodeBlockSyntax);
+                if (innerCodeBlock is not null)
+                {
+                    csharpCodeBlock = innerCodeBlock as CSharpCodeBlockSyntax;
+                }
+            }
         }
-        else if (node is CSharpExplicitExpressionSyntax explicitExpression)
+        // @{
+        //    var x = 1;
+        // }
+        else if (node is CSharpCodeBlockSyntax outerCSharpCodeBlock)
         {
-            csharpBody = explicitExpression.Body;
+            // @{
+            //    var x = 1;
+            // }
+            var csharpStatement = outerCSharpCodeBlock.ChildNodes().FirstOrDefault(n => n is CSharpStatementSyntax);
+            if (csharpStatement is not null)
+            {
+                // {
+                //    var x = 1;
+                // }
+                var csharpStatementBody = ((CSharpStatementSyntax)csharpStatement).Body;
+
+                // var x = 1;
+                csharpCodeBlock = csharpStatementBody.ChildNodes().FirstOrDefault(n => n is CSharpCodeBlockSyntax) as CSharpCodeBlockSyntax;
+            }
         }
-        else if (node is CSharpImplicitExpressionSyntax implicitExpression)
+        // @(x)
+        else if (node is CSharpExplicitExpressionSyntax csharpExplicitExpression)
         {
-            csharpBody = implicitExpression.Body;
+            // (x)
+            var body = csharpExplicitExpression.Body as CSharpExplicitExpressionBodySyntax;
+            if (body is not null)
+            {
+                // x
+                csharpCodeBlock = body.CSharpCode;
+            }
         }
-        else if (node is CSharpStatementSyntax csharpStatement)
+        // @x
+        else if (node is CSharpImplicitExpressionSyntax csharpImplicitExpression)
         {
-            csharpBody = csharpStatement.Body;
+            var csharpImplicitExpressionBody = csharpImplicitExpression.Body as CSharpImplicitExpressionBodySyntax;
+            if (csharpImplicitExpressionBody is not null)
+            {
+                // x
+                csharpCodeBlock = csharpImplicitExpressionBody.CSharpCode;
+            }
         }
 
-        return csharpBody is not null;
+        return csharpCodeBlock is not null;
     }
 }

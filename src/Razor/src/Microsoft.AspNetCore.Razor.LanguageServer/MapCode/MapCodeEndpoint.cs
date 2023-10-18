@@ -265,9 +265,9 @@ internal sealed class MapCodeEndpoint : IRazorDocumentlessRequestHandler<LSP.Map
     // this list as the client evolves to send more types of nodes.
     private readonly static List<Type> s_validNodesToMap =
     [
+        typeof(CSharpCodeBlockSyntax),
         typeof(CSharpExplicitExpressionSyntax),
         typeof(CSharpImplicitExpressionSyntax),
-        typeof(CSharpStatementSyntax),
         typeof(MarkupElementSyntax),
         typeof(MarkupTextLiteralSyntax),
         typeof(RazorDirectiveSyntax),
