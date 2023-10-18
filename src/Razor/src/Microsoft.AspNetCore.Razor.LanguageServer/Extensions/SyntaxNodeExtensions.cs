@@ -2,15 +2,12 @@
 // Licensed under the MIT license. See License.txt in the project root for license information.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.Language.Syntax;
 using Microsoft.AspNetCore.Razor.LanguageServer.Formatting;
-using Microsoft.AspNetCore.Razor.LanguageServer.MapCode.SourceNode;
-using Microsoft.AspNetCore.Razor.LanguageServer.MapCode;
 using Microsoft.CodeAnalysis.Text;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 
@@ -389,115 +386,48 @@ internal static class SyntaxNodeExtensions
         return node;
     }
 
-    /// <summary>
-    /// Extracts source nodes from a syntax node.
-    /// </summary>
-    /// <param name="rootNode">The root node.</param>
-    /// <returns>A list of source nodes.</returns>
-    public static IList<RazorSourceNode> ExtractSourceNodes(this SyntaxNode rootNode)
+    public static bool ExistsOnTarget(this SyntaxNode node, SyntaxNode target)
     {
-        var sourceNodes = new List<RazorSourceNode>();
-        var stack = new Stack<SyntaxNode>();
-        stack.Push(rootNode);
+        var matchingNode = target.DescendantNodesAndSelf()
+            // Empty new lines can affect our comparison so we remove them since they're insignificant.
+            .Where(n => n.RemoveEmptyNewLines().ToFullString() == node.RemoveEmptyNewLines().ToFullString())
+            .FirstOrDefault();
 
-        while (stack.Count > 0)
-        {
-            var currentNode = stack.Pop();
-
-            if (currentNode.IsScopedNode(out var scope) || currentNode.IsSimpleNode())
-            {
-                RazorSourceNode sourceNode;
-                if (scope != Scope.Unknown)
-                {
-                    sourceNode = new RazorScopedNode(currentNode, scope);
-                }
-                else
-                {
-                    sourceNode = new RazorSimpleNode(currentNode);
-                }
-
-                sourceNodes.Add(sourceNode);
-                continue;
-            }
-
-            // Add child nodes to the stack in reverse order for depth-first search
-            foreach (var childNode in currentNode.ChildNodes().Reverse())
-            {
-                stack.Push(childNode);
-            }
-        }
-
-        return sourceNodes;
+        return matchingNode is not null;
     }
 
-    /// <summary>
-    /// Determines whether the node is a scoped node.
-    /// </summary>
-    /// <param name="node">The syntax node.</param>
-    /// <param name="scope">The scope.</param>
-    /// <returns>True if node is a scoped node, false otherwise.</returns>
-    public static bool IsScopedNode(this SyntaxNode node, out Scope scope)
+    public static SyntaxNode RemoveEmptyNewLines(this SyntaxNode node)
     {
-        scope = Scope.Unknown;
-        var nodeType = node.GetType();
-        if (NodeTypes.Exclude.Contains(nodeType))
+        if (node is MarkupTextLiteralSyntax markupTextLiteral)
         {
-            return false;
+            var literalTokensWithoutLines = new SyntaxList<SyntaxToken>(markupTextLiteral.LiteralTokens.Where(t => t.Kind != SyntaxKind.NewLine));
+            var updatedLiteral = markupTextLiteral.WithLiteralTokens(literalTokensWithoutLines);
+            return updatedLiteral;
         }
 
-        foreach (var scopeTypes in NodeTypes.Scoped)
-        {
-            foreach (var type in scopeTypes.Value)
-            {
-                if (nodeType == type)
-                {
-                    scope = scopeTypes.Key;
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return node;
     }
 
-    /// <summary>
-    /// Determines whether the node is a simple node.
-    /// </summary>
-    /// <param name="node">The syntax node.</param>
-    /// <returns>True if node is a simple node, false otherwise.</returns>
-    public static bool IsSimpleNode(this SyntaxNode node)
+    public static bool IsCSharpNode(this SyntaxNode node, [NotNullWhen(true)] out CSharpSyntaxNode? csharpBody)
     {
-        var nodeType = node.GetType();
-        if (NodeTypes.Exclude.Contains(nodeType))
+        csharpBody = null;
+        if (node is RazorDirectiveSyntax razorDirective)
         {
-            return false;
+            csharpBody = razorDirective.Body;
+        }
+        else if (node is CSharpExplicitExpressionSyntax explicitExpression)
+        {
+            csharpBody = explicitExpression.Body;
+        }
+        else if (node is CSharpImplicitExpressionSyntax implicitExpression)
+        {
+            csharpBody = implicitExpression.Body;
+        }
+        else if (node is CSharpStatementSyntax csharpStatement)
+        {
+            csharpBody = csharpStatement.Body;
         }
 
-        foreach (var type in NodeTypes.Simple)
-        {
-            if (node.GetType() == type)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Gets the body syntax of the specified node.
-    /// </summary>
-    /// <param name="node">The node to get the body syntax of.</param>
-    /// <returns>The body syntax of the specified node, if it has any.</returns>
-    public static SyntaxNode? GetBodySyntax(this SyntaxNode node)
-    {
-        return node switch
-        {
-            CSharpExplicitExpressionSyntax explicitExpression => explicitExpression.Body,
-            CSharpImplicitExpressionSyntax implicitExpression => implicitExpression.Body,
-            CSharpStatementSyntax statementSyntax => statementSyntax.Body,
-            RazorDirectiveSyntax razorDirectiveSyntax => razorDirectiveSyntax.Body,
-            _ => null
-        };
+        return csharpBody is not null;
     }
 }

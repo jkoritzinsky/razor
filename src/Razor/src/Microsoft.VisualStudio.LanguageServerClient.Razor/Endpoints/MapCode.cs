@@ -23,6 +23,8 @@ internal partial class RazorCustomMessageTarget
             return null;
         }
 
+        ConvertCSharpFocusLocationUris(request.FocusLocations);
+
         var mappings = new MapCodeMapping()
         {
             TextDocument = request.Identifier.TextDocumentIdentifier.WithUri(delegationDetails.Value.ProjectedUri),
@@ -51,6 +53,33 @@ internal partial class RazorCustomMessageTarget
         {
             // C# and/or HTML haven't implemented handlers yet.
             return null;
+        }
+    }
+
+    private void ConvertCSharpFocusLocationUris(Location[][] focusLocations)
+    {
+        // If the focus locations are in a C# context, map them to the C# document.
+        foreach (var locationsByPriority in focusLocations)
+        {
+            foreach (var location in locationsByPriority)
+            {
+                if (location is null)
+                {
+                    continue;
+                }
+
+                if (!_documentManager.TryGetDocument(location.Uri, out var documentSnapshot))
+                {
+                    continue;
+                }
+
+                if (!documentSnapshot.TryGetVirtualDocument<CSharpVirtualDocumentSnapshot>(out var virtualDocument))
+                {
+                    continue;
+                }
+
+                location.Uri = virtualDocument.Uri;
+            }
         }
     }
 }

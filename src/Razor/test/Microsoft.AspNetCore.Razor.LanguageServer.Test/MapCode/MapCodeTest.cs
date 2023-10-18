@@ -31,7 +31,7 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
     private const string RazorFilePath = "C:/path/to/file.razor";
 
     [Fact]
-    public async Task HandleRazorInsertionAsync()
+    public async Task HandleRazorSingleLineInsertionAsync()
     {
         var originalCode = """
                 <h3>Component</h3>
@@ -71,20 +71,202 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
         await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
     }
 
-    [Fact]
-    public async Task HandleRazorReplacementAsync()
+    [Fact(Skip = "C# needs to implement + merge their LSP-based mapper before this test will pass")]
+    public async Task HandleCSharpInsertionAsync()
     {
         var originalCode = """
-                Test
-                $$
+                @code
+                {
+                    public string Title { get; set; }$$
+                }
+
                 """;
 
         var codeToMap = """
-            Test
-            Test2
-            Test3
+            @code
+            {
+                public string Title { get; set; }
+
+                void M()
+                {
+                    var x = 1;
+                }
+            }
 
             """;
+
+        var expectedEdit = new WorkspaceEdit
+        {
+            Changes = new Dictionary<string, TextEdit[]>
+            {
+                {
+                    RazorFilePath,
+                    new TextEdit[]
+                    {
+                        new()
+                        {
+                            NewText = """
+                                      void M()
+                                      {
+                                          var x = 1;
+                                      }
+                                      """,
+                            Range = new Range
+                            {
+                                Start = new Position(2, 37),
+                                End = new Position(2, 37)
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
+    }
+
+    [Fact]
+    public async Task HandleHtmlMultiLineInsertionAsync()
+    {
+        var originalCode = """
+                <h3>Component</h3>
+                $$
+                @code {
+
+                }
+                
+                """;
+
+        var codeToMap = """
+            <h1>Title</h1>
+            <h2>Subtitle</h2>
+            """;
+
+        var expectedEdit = new WorkspaceEdit
+        {
+            Changes = new Dictionary<string, TextEdit[]>
+            {
+                {
+                    RazorFilePath,
+                    new TextEdit[]
+                    {
+                        new()
+                        {
+                            // Code mapper isn't responsible for formatting
+                            NewText = """
+                                      <h1>Title</h1><h2>Subtitle</h2>
+                                      """,
+                            Range = new Range
+                            {
+                                Start = new Position(1, 0),
+                                End = new Position(1, 0)
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
+    }
+
+    [Fact]
+    public async Task HandleIgnoreExistingCodeAsync()
+    {
+        var originalCode = """
+                @page "/"
+
+                <PageTitle>Index</PageTitle>
+
+                <h1>Hello, world!</h1>
+
+                $$
+
+                Welcome to your new app.
+                
+                """;
+
+        var codeToMap = """
+            @page "/"
+
+            <PageTitle>Index</PageTitle>
+
+            <h1>Hello, world!</h1>
+
+            <button>Click me</button>
+
+            Welcome to your new app.
+            
+            """;
+
+        var expectedEdit = new WorkspaceEdit
+        {
+            Changes = new Dictionary<string, TextEdit[]>
+            {
+                {
+                    RazorFilePath,
+                    new TextEdit[]
+                    {
+                        new()
+                        {
+                            // Code mapper isn't responsible for formatting
+                            NewText = """
+                                      <button>Click me</button>
+                                      """,
+                            Range = new Range
+                            {
+                                Start = new Position(6, 0),
+                                End = new Position(6, 0)
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
+    }
+
+    [Fact]
+    public async Task HandleMultipleFocusLocationsAsync()
+    {
+        var originalCode = """
+                <h3>Component</h3>
+                $$
+                @code {
+
+                }
+                
+                """;
+
+        var codeToMap = """
+            <PageTitle>Title</PageTitle>
+            """;
+
+        Location[][] locations = [
+            [
+                new Location
+                {
+                    Range = new Range
+                    {
+                        Start = new Position(1, 0),
+                        End = new Position(1, 0)
+                    },
+                    Uri = new Uri(RazorFilePath)
+                }
+            ],
+            [
+                new Location
+                {
+                    Range = new Range
+                    {
+                        Start = new Position(0, 0),
+                        End = new Position(5, 0)
+                    },
+                    Uri = new Uri(RazorFilePath)
+                }
+            ]
+        ];
 
         var expectedEdit = new WorkspaceEdit
         {
@@ -108,14 +290,19 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
             }
         };
 
-        await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit);
+        await VerifyCodeMappingAsync(originalCode, [codeToMap], expectedEdit, locations: locations);
     }
 
-    private async Task VerifyCodeMappingAsync(string originalCode, string[] codeToMap, LSP.WorkspaceEdit expectedEdit, string razorFilePath = RazorFilePath)
+    private async Task VerifyCodeMappingAsync(
+        string originalCode,
+        string[] codeToMap,
+        LSP.WorkspaceEdit expectedEdit,
+        string razorFilePath = RazorFilePath,
+        LSP.Location[][]? locations = null)
     {
         // Arrange
         TestFileMarkupParser.GetPositionAndSpans(originalCode, out var output, out int cursorPosition, out ImmutableArray<TextSpan> spans);
-        var codeDocument = CreateCodeDocument(output);
+        var codeDocument = CreateCodeDocument(output, filePath: razorFilePath);
         var csharpSourceText = codeDocument.GetCSharpSourceText();
         var csharpDocumentUri = new Uri(razorFilePath + "__virtual.g.cs");
         var csharpServer = await CSharpTestLspServerHelpers.CreateCSharpLspServerAsync(
@@ -137,7 +324,7 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
                 {
                     Uri = new Uri(razorFilePath)
                 },
-                FocusLocations =
+                FocusLocations = locations ??
                 [
                     [
                         new Location
@@ -166,8 +353,6 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
         var result = await endpoint.HandleRequestAsync(request, requestContext, DisposalToken);
 
         // Assert
-
-        // TextEdit doesn't define an equals comparer, so we need to pass in a custom comparer.
         Assert.Equal(expectedEdit, result, new WorkspaceEditComparer());
     }
 
@@ -229,6 +414,7 @@ public class MapCodeTest(ITestOutputHelper testOutput) : LanguageServerTestBase(
         }
     }
 
+    // WorkspaceEdit doesn't have a built in comparer so we have to build our own for testing.
     private class WorkspaceEditComparer : IEqualityComparer<WorkspaceEdit?>
     {
         public bool Equals(WorkspaceEdit? x, WorkspaceEdit? y)
