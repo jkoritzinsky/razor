@@ -406,7 +406,8 @@ internal static class SyntaxNodeExtensions
     {
         if (node is MarkupTextLiteralSyntax markupTextLiteral)
         {
-            var literalTokensWithoutLines = new SyntaxList<SyntaxToken>(markupTextLiteral.LiteralTokens.Where(t => t.Kind != SyntaxKind.NewLine));
+            var literalTokensWithoutLines = new AspNetCore.Razor.Language.Syntax.SyntaxList<SyntaxToken>(
+                markupTextLiteral.LiteralTokens.Where(t => t.Kind != SyntaxKind.NewLine));
             var updatedLiteral = markupTextLiteral.WithLiteralTokens(literalTokensWithoutLines);
             return updatedLiteral;
         }
