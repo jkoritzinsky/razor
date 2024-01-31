@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.LanguageServer.Common;
 using Microsoft.CodeAnalysis.Razor;
+using Microsoft.CodeAnalysis.Razor.Logging;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
 using Microsoft.CodeAnalysis.Razor.Workspaces;
 using Microsoft.Extensions.Logging;
@@ -31,8 +32,8 @@ internal class RazorDiagnosticsPublisher : DocumentProcessedListener
     private readonly ProjectSnapshotManagerDispatcher _projectSnapshotManagerDispatcher;
     private readonly IClientConnection _clientConnection;
     private readonly Dictionary<string, IDocumentSnapshot> _work;
-    private readonly ILogger<RazorDiagnosticsPublisher> _logger;
-    private ProjectSnapshotManager? _projectManager;
+    private readonly ILogger _logger;
+    private IProjectSnapshotManager? _projectManager;
     private readonly LanguageServerFeatureOptions _languageServerFeatureOptions;
     private readonly Lazy<RazorTranslateDiagnosticsService> _razorTranslateDiagnosticsService;
     private readonly Lazy<IDocumentContextFactory> _documentContextFactory;
@@ -43,7 +44,7 @@ internal class RazorDiagnosticsPublisher : DocumentProcessedListener
         LanguageServerFeatureOptions languageServerFeatureOptions,
         Lazy<RazorTranslateDiagnosticsService> razorTranslateDiagnosticsService,
         Lazy<IDocumentContextFactory> documentContextFactory,
-        ILoggerFactory loggerFactory)
+        IRazorLoggerFactory loggerFactory)
     {
         if (projectSnapshotManagerDispatcher is null)
         {
@@ -92,7 +93,7 @@ internal class RazorDiagnosticsPublisher : DocumentProcessedListener
     // Used in tests to ensure we can control when background work completes.
     public ManualResetEventSlim? NotifyBackgroundWorkCompleting { get; set; }
 
-    public override void Initialize(ProjectSnapshotManager projectManager)
+    public override void Initialize(IProjectSnapshotManager projectManager)
     {
         if (projectManager is null)
         {

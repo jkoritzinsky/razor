@@ -8,12 +8,15 @@ using System.Collections.Immutable;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Language;
+using Microsoft.AspNetCore.Razor.ProjectEngineHost;
+using Microsoft.AspNetCore.Razor.ProjectSystem;
 using Microsoft.AspNetCore.Razor.Test.Common;
 using Microsoft.AspNetCore.Razor.Test.Common.ProjectSystem;
 using Microsoft.AspNetCore.Razor.Test.Common.Workspaces;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Razor;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
+using Microsoft.CodeAnalysis.Razor.Workspaces;
 using Microsoft.VisualStudio.Editor.Razor;
 using Microsoft.VisualStudio.LanguageServices.Razor.Test;
 using Microsoft.VisualStudio.Shell.Interop;
@@ -32,6 +35,7 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
     private readonly HostProject _someOtherProject;
     private Project _someWorkspaceProject;
     private readonly CodeAnalysis.Workspace _workspace;
+    private readonly IWorkspaceProvider _workspaceProvider;
 
     public VsSolutionUpdatesProjectSnapshotChangeTriggerTest(ITestOutputHelper testOutput)
         : base(testOutput)
@@ -39,15 +43,31 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
         _someProject = new HostProject(TestProjectData.SomeProject.FilePath, TestProjectData.SomeProject.IntermediateOutputPath, FallbackRazorConfiguration.MVC_1_0, TestProjectData.SomeProject.RootNamespace);
         _someOtherProject = new HostProject(TestProjectData.AnotherProject.FilePath, TestProjectData.AnotherProject.IntermediateOutputPath, FallbackRazorConfiguration.MVC_2_0, TestProjectData.AnotherProject.RootNamespace);
 
-        _workspace = TestWorkspace.Create(w => _someWorkspaceProject = w.AddProject(ProjectInfo.Create(
-                ProjectId.CreateNewId(),
-                VersionStamp.Create(),
-                "SomeProject",
-                "SomeProject",
-                LanguageNames.CSharp,
-                filePath: _someProject.FilePath).WithCompilationOutputInfo(new CompilationOutputInfo().WithAssemblyPath(Path.Combine(_someProject.IntermediateOutputPath, "SomeProject.dll")))));
+        var testServices = TestServices.Create([], []);
 
+        _workspace = TestWorkspace.Create(testServices,
+            w =>
+            {
+                _someWorkspaceProject = w.AddProject(
+                    ProjectInfo.Create(
+                        ProjectId.CreateNewId(),
+                        VersionStamp.Create(),
+                        "SomeProject",
+                        "SomeProject",
+                        LanguageNames.CSharp,
+                        filePath: _someProject.FilePath)
+                    .WithCompilationOutputInfo(
+                        new CompilationOutputInfo()
+                            .WithAssemblyPath(Path.Combine(_someProject.IntermediateOutputPath, "SomeProject.dll"))));
+            });
         AddDisposable(_workspace);
+
+        var workspaceProviderMock = new Mock<IWorkspaceProvider>(MockBehavior.Strict);
+        workspaceProviderMock
+            .Setup(x => x.GetWorkspace())
+            .Returns(_workspace);
+
+        _workspaceProvider = workspaceProviderMock.Object;
     }
 
     [Fact]
@@ -67,9 +87,10 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
         var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(
             services.Object,
             Mock.Of<TextBufferProjectService>(MockBehavior.Strict),
-            Mock.Of<ProjectWorkspaceStateGenerator>(MockBehavior.Strict),
+            Mock.Of<IProjectWorkspaceStateGenerator>(MockBehavior.Strict),
+            _workspaceProvider,
             s_dispatcher,
-            JoinableTaskFactory.Context);
+            JoinableTaskContext);
 
         // Act
         trigger.Initialize(Mock.Of<ProjectSnapshotManagerBase>(MockBehavior.Strict));
@@ -88,21 +109,23 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
             .Setup(b => b.AdviseUpdateSolutionEvents(It.IsAny<VsSolutionUpdatesProjectSnapshotChangeTrigger>(), out cookie))
             .Returns(VSConstants.S_OK);
 
-        var context = JoinableTaskFactory.Context;
-
         var services = new Mock<IServiceProvider>(MockBehavior.Strict);
-        services.Setup(s => s.GetService(It.Is<Type>(f => f == typeof(SVsSolutionBuildManager)))).Callback(() => Assert.True(context.IsOnMainThread)).Returns(buildManager.Object);
+        services
+            .Setup(s => s.GetService(It.Is<Type>(f => f == typeof(SVsSolutionBuildManager))))
+            .Callback(() => Assert.True(JoinableTaskContext.IsOnMainThread))
+            .Returns(buildManager.Object);
 
         var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(
             services.Object,
             Mock.Of<TextBufferProjectService>(MockBehavior.Strict),
-            Mock.Of<ProjectWorkspaceStateGenerator>(MockBehavior.Strict),
+            Mock.Of<IProjectWorkspaceStateGenerator>(MockBehavior.Strict),
+            _workspaceProvider,
             s_dispatcher,
-            context);
+            JoinableTaskContext);
 
         await Task.Run(() =>
         {
-            Assert.False(context.IsOnMainThread);
+            Assert.False(JoinableTaskContext.IsOnMainThread);
             trigger.Initialize(Mock.Of<ProjectSnapshotManagerBase>(MockBehavior.Strict));
             return Task.CompletedTask;
         });
@@ -112,7 +135,7 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
     public async Task SolutionClosing_CancelsActiveWork()
     {
         // Arrange
-        var projectManager = new TestProjectSnapshotManager(_workspace, s_dispatcher)
+        var projectManager = new TestProjectSnapshotManager(ProjectEngineFactories.DefaultProvider, s_dispatcher)
         {
             AllowNotifyListeners = true,
         };
@@ -129,7 +152,13 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
         projectService.Setup(p => p.GetProjectPath(It.IsAny<IVsHierarchy>())).Returns(expectedProjectPath);
         var workspaceStateGenerator = new TestProjectWorkspaceStateGenerator();
 
-        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(TestServiceProvider.Instance, projectService.Object, workspaceStateGenerator, s_dispatcher, JoinableTaskFactory.Context);
+        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(
+            TestServiceProvider.Instance,
+            projectService.Object,
+            workspaceStateGenerator,
+            _workspaceProvider,
+            s_dispatcher,
+            JoinableTaskContext);
         trigger.Initialize(projectManager);
         trigger.UpdateProjectCfg_Done(Mock.Of<IVsHierarchy>(MockBehavior.Strict), pCfgProj: default, pCfgSln: default, dwAction: default, fSuccess: default, fCancel: default);
         await trigger.CurrentUpdateTaskForTests;
@@ -152,7 +181,7 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
     public async Task OnProjectBuiltAsync_KnownProject_EnqueuesProjectStateUpdate()
     {
         // Arrange
-        var projectManager = new TestProjectSnapshotManager(_workspace, s_dispatcher);
+        var projectManager = new TestProjectSnapshotManager(ProjectEngineFactories.DefaultProvider, s_dispatcher);
         var expectedProjectPath = _someProject.FilePath;
         var expectedProjectSnapshot = await s_dispatcher.RunOnDispatcherThreadAsync(() =>
         {
@@ -166,7 +195,13 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
         projectService.Setup(p => p.GetProjectPath(It.IsAny<IVsHierarchy>())).Returns(expectedProjectPath);
         var workspaceStateGenerator = new TestProjectWorkspaceStateGenerator();
 
-        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(TestServiceProvider.Instance, projectService.Object, workspaceStateGenerator, s_dispatcher, JoinableTaskFactory.Context);
+        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(
+            TestServiceProvider.Instance,
+            projectService.Object,
+            workspaceStateGenerator,
+            _workspaceProvider,
+            s_dispatcher,
+            JoinableTaskContext);
         trigger.Initialize(projectManager);
 
         // Act
@@ -189,27 +224,41 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
             .Returns(VSConstants.S_OK);
 
         var services = new Mock<IServiceProvider>(MockBehavior.Strict);
-        services.Setup(s => s.GetService(It.Is<Type>(f => f == typeof(SVsSolutionBuildManager)))).Returns(buildManager.Object);
-        var projectSnapshot = new ProjectSnapshot(
+        services
+            .Setup(s => s.GetService(It.Is<Type>(f => f == typeof(SVsSolutionBuildManager))))
+            .Returns(buildManager.Object);
+
+        var projectEngineFactoryProvider = Mock.Of<IProjectEngineFactoryProvider>(MockBehavior.Strict);
+
+        IProjectSnapshot projectSnapshot = new ProjectSnapshot(
             ProjectState.Create(
-                _workspace.Services,
-                new HostProject("/Some/Unknown/Path.csproj", "/Some/Unknown/obj", RazorConfiguration.Default, "Path")));
+                projectEngineFactoryProvider,
+                new HostProject("/Some/Unknown/Path.csproj", "/Some/Unknown/obj", RazorConfiguration.Default, "Path"),
+                ProjectWorkspaceState.Default));
         var expectedProjectPath = projectSnapshot.FilePath;
 
         var projectService = new Mock<TextBufferProjectService>(MockBehavior.Strict);
         projectService.Setup(p => p.GetProjectPath(It.IsAny<IVsHierarchy>())).Returns(expectedProjectPath);
 
         var projectManager = new Mock<ProjectSnapshotManagerBase>(MockBehavior.Strict);
-        projectManager.SetupGet(p => p.Workspace).Returns(_workspace);
         projectManager
             .Setup(p => p.GetAllProjectKeys(projectSnapshot.FilePath))
             .Returns(ImmutableArray.Create(projectSnapshot.Key));
         projectManager
             .Setup(p => p.GetLoadedProject(projectSnapshot.Key))
             .Returns(projectSnapshot);
+        projectManager
+            .Setup(p => p.TryGetLoadedProject(projectSnapshot.Key, out projectSnapshot))
+            .Returns(true);
         var workspaceStateGenerator = new TestProjectWorkspaceStateGenerator();
 
-        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(services.Object, projectService.Object, workspaceStateGenerator, s_dispatcher, JoinableTaskFactory.Context);
+        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(
+            services.Object,
+            projectService.Object,
+            workspaceStateGenerator,
+            _workspaceProvider,
+            s_dispatcher,
+            JoinableTaskContext);
         trigger.Initialize(projectManager.Object);
 
         // Act
@@ -238,13 +287,18 @@ public class VsSolutionUpdatesProjectSnapshotChangeTriggerTest : ToolingTestBase
         projectService.Setup(p => p.GetProjectPath(It.IsAny<IVsHierarchy>())).Returns(expectedProjectPath);
 
         var projectManager = new Mock<ProjectSnapshotManagerBase>(MockBehavior.Strict);
-        projectManager.SetupGet(p => p.Workspace).Returns(_workspace);
         projectManager
             .Setup(p => p.GetAllProjectKeys(expectedProjectPath))
             .Returns(ImmutableArray<ProjectKey>.Empty);
         var workspaceStateGenerator = new TestProjectWorkspaceStateGenerator();
 
-        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(services.Object, projectService.Object, workspaceStateGenerator, s_dispatcher, JoinableTaskFactory.Context);
+        var trigger = new VsSolutionUpdatesProjectSnapshotChangeTrigger(
+            services.Object,
+            projectService.Object,
+            workspaceStateGenerator,
+            _workspaceProvider,
+            s_dispatcher,
+            JoinableTaskContext);
         trigger.Initialize(projectManager.Object);
 
         // Act

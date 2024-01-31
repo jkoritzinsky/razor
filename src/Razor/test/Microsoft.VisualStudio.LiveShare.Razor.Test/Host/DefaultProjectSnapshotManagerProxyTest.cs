@@ -5,14 +5,17 @@
 
 using System;
 using System.Collections.Immutable;
+using System.Threading;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Language;
+using Microsoft.AspNetCore.Razor.ProjectEngineHost;
 using Microsoft.AspNetCore.Razor.ProjectSystem;
 using Microsoft.AspNetCore.Razor.Test.Common.Editor;
-using Microsoft.AspNetCore.Razor.Test.Common.Workspaces;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
 using Microsoft.VisualStudio.LiveShare.Razor.Test;
 using Microsoft.VisualStudio.Threading;
+using Moq;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -20,33 +23,29 @@ namespace Microsoft.VisualStudio.LiveShare.Razor.Host;
 
 public class DefaultProjectSnapshotManagerProxyTest : ProjectSnapshotManagerDispatcherTestBase
 {
-    private readonly CodeAnalysis.Workspace _workspace;
     private readonly IProjectSnapshot _projectSnapshot1;
     private readonly IProjectSnapshot _projectSnapshot2;
 
     public DefaultProjectSnapshotManagerProxyTest(ITestOutputHelper testOutput)
         : base(testOutput)
     {
-        _workspace = TestWorkspace.Create();
-        AddDisposable(_workspace);
+        var projectEngineFactoryProvider = Mock.Of<IProjectEngineFactoryProvider>(MockBehavior.Strict);
 
-        var projectWorkspaceState1 = new ProjectWorkspaceState(ImmutableArray.Create(
-            TagHelperDescriptorBuilder.Create("test1", "TestAssembly1").Build()),
-            csharpLanguageVersion: default);
+        var projectWorkspaceState1 = ProjectWorkspaceState.Create(ImmutableArray.Create(
+            TagHelperDescriptorBuilder.Create("test1", "TestAssembly1").Build()));
 
         _projectSnapshot1 = new ProjectSnapshot(
             ProjectState.Create(
-                _workspace.Services,
+                projectEngineFactoryProvider,
                 new HostProject("/host/path/to/project1.csproj", "/host/path/to/obj", RazorConfiguration.Default, "project1"),
                 projectWorkspaceState1));
 
-        var projectWorkspaceState2 = new ProjectWorkspaceState(ImmutableArray.Create(
-            TagHelperDescriptorBuilder.Create("test2", "TestAssembly2").Build()),
-            csharpLanguageVersion: default);
+        var projectWorkspaceState2 = ProjectWorkspaceState.Create(ImmutableArray.Create(
+            TagHelperDescriptorBuilder.Create("test2", "TestAssembly2").Build()));
 
         _projectSnapshot2 = new ProjectSnapshot(
             ProjectState.Create(
-                _workspace.Services,
+                projectEngineFactoryProvider,
                 new HostProject("/host/path/to/project2.csproj", "/host/path/to/obj", RazorConfiguration.Default, "project2"),
                 projectWorkspaceState2));
     }
@@ -66,17 +65,20 @@ public class DefaultProjectSnapshotManagerProxyTest : ProjectSnapshotManagerDisp
         var state = await JoinableTaskFactory.RunAsync(() => proxy.CalculateUpdatedStateAsync(projectSnapshotManager.GetProjects()));
 
         // Assert
+        var project1TagHelpers = await _projectSnapshot1.GetTagHelpersAsync(CancellationToken.None);
+        var project2TagHelpers = await _projectSnapshot2.GetTagHelpersAsync(CancellationToken.None);
+
         Assert.Collection(
             state.ProjectHandles,
             handle =>
             {
                 Assert.Equal("vsls:/path/to/project1.csproj", handle.FilePath.ToString());
-                Assert.Equal<TagHelperDescriptor>(_projectSnapshot1.TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
+                Assert.Equal<TagHelperDescriptor>(project1TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
             },
             handle =>
             {
                 Assert.Equal("vsls:/path/to/project2.csproj", handle.FilePath.ToString());
-                Assert.Equal<TagHelperDescriptor>(_projectSnapshot2.TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
+                Assert.Equal<TagHelperDescriptor>(project2TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
             });
     }
 
@@ -163,17 +165,20 @@ public class DefaultProjectSnapshotManagerProxyTest : ProjectSnapshotManagerDisp
         var state = await JoinableTaskFactory.RunAsync(() => proxy.GetProjectManagerStateAsync(DisposalToken));
 
         // Assert
+        var project1TagHelpers = await _projectSnapshot1.GetTagHelpersAsync(CancellationToken.None);
+        var project2TagHelpers = await _projectSnapshot2.GetTagHelpersAsync(CancellationToken.None);
+
         Assert.Collection(
             state.ProjectHandles,
             handle =>
             {
                 Assert.Equal("vsls:/path/to/project1.csproj", handle.FilePath.ToString());
-                Assert.Equal<TagHelperDescriptor>(_projectSnapshot1.TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
+                Assert.Equal<TagHelperDescriptor>(project1TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
             },
             handle =>
             {
                 Assert.Equal("vsls:/path/to/project2.csproj", handle.FilePath.ToString());
-                Assert.Equal<TagHelperDescriptor>(_projectSnapshot2.TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
+                Assert.Equal<TagHelperDescriptor>(project2TagHelpers, handle.ProjectWorkspaceState.TagHelpers);
             });
     }
 
@@ -196,36 +201,29 @@ public class DefaultProjectSnapshotManagerProxyTest : ProjectSnapshotManagerDisp
         Assert.Same(state1, state2);
     }
 
-    private class TestProjectSnapshotManager : ProjectSnapshotManager
+    private class TestProjectSnapshotManager(params IProjectSnapshot[] projects) : IProjectSnapshotManager
     {
-        private ImmutableArray<IProjectSnapshot> _projects;
-        public TestProjectSnapshotManager(params IProjectSnapshot[] projects)
-        {
-            _projects = projects.ToImmutableArray();
-        }
+        private ImmutableArray<IProjectSnapshot> _projects = projects.ToImmutableArray();
 
-        public override ImmutableArray<IProjectSnapshot> GetProjects() => _projects;
+        public ImmutableArray<IProjectSnapshot> GetProjects() => _projects;
 
-        public override event EventHandler<ProjectChangeEventArgs> Changed;
+        public event EventHandler<ProjectChangeEventArgs> Changed;
 
         public void TriggerChanged(ProjectChangeEventArgs args)
         {
             Changed?.Invoke(this, args);
         }
 
-        public override IProjectSnapshot GetLoadedProject(ProjectKey projectKey)
-        {
-            throw new NotImplementedException();
-        }
+        public IProjectSnapshot GetLoadedProject(ProjectKey projectKey)
+            => throw new NotImplementedException();
 
-        public override ImmutableArray<ProjectKey> GetAllProjectKeys(string projectFileName)
-        {
-            throw new NotImplementedException();
-        }
+        public ImmutableArray<ProjectKey> GetAllProjectKeys(string projectFileName)
+            => throw new NotImplementedException();
 
-        public override bool IsDocumentOpen(string documentFilePath)
-        {
-            throw new NotImplementedException();
-        }
+        public bool IsDocumentOpen(string documentFilePath)
+            => throw new NotImplementedException();
+
+        public bool TryGetLoadedProject(ProjectKey projectKey, [NotNullWhen(true)] out IProjectSnapshot project)
+            => throw new NotImplementedException();
     }
 }

@@ -12,7 +12,6 @@ using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.Language.Syntax;
 using Microsoft.AspNetCore.Razor.LanguageServer.CodeActions.Models;
 using Microsoft.AspNetCore.Razor.LanguageServer.CodeActions.Razor;
-using Microsoft.AspNetCore.Razor.LanguageServer.Common;
 using Microsoft.AspNetCore.Razor.LanguageServer.Extensions;
 using Microsoft.CodeAnalysis.ExternalAccess.Razor;
 using Microsoft.CodeAnalysis.Razor.Workspaces.Extensions;
@@ -148,9 +147,9 @@ internal sealed class TypeAccessibilityCodeActionProvider : ICSharpCodeActionPro
                 var fqnCodeAction = CreateFQNCodeAction(context, diagnostic, codeAction, fqn);
                 typeAccessibilityCodeActions.Add(fqnCodeAction);
 
-                if (AddUsingsCodeActionProviderHelper.TryCreateAddUsingResolutionParams(fqn, context.Request.TextDocument.Uri, out var @namespace, out var resolutionParams))
+                if (AddUsingsCodeActionProviderHelper.TryCreateAddUsingResolutionParams(fqn, context.Request.TextDocument.Uri, additionalEdit: null, out var @namespace, out var resolutionParams))
                 {
-                    var addUsingCodeAction = RazorCodeActionFactory.CreateAddComponentUsing(@namespace, resolutionParams);
+                    var addUsingCodeAction = RazorCodeActionFactory.CreateAddComponentUsing(@namespace, newTagName: null, resolutionParams);
                     typeAccessibilityCodeActions.Add(addUsingCodeAction);
                 }
             }

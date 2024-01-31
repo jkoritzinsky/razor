@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using Microsoft.CodeAnalysis.ExternalAccess.Razor;
 using Microsoft.CodeAnalysis.Razor.Editor;
+using Microsoft.VisualStudio.Threading;
 
 namespace Microsoft.VisualStudio.Editor.Razor;
 
@@ -50,7 +51,7 @@ internal class ClientSettingsManager : EditorSettingsManager, IClientSettingsMan
         if (_advancedSettingsStorage is not null)
         {
             Update(_advancedSettingsStorage.GetAdvancedSettings());
-            _advancedSettingsStorage.Changed += AdvancedSettingsChanged;
+            _advancedSettingsStorage.OnChangedAsync(Update).Forget();
         }
     }
 
@@ -74,6 +75,19 @@ internal class ClientSettingsManager : EditorSettingsManager, IClientSettingsMan
         }
     }
 
+    public void Update(ClientCompletionSettings updatedSettings)
+    {
+        if (updatedSettings is null)
+        {
+            throw new ArgumentNullException(nameof(updatedSettings));
+        }
+
+        lock (_settingsUpdateLock)
+        {
+            UpdateSettings_NoLock(_settings with { ClientCompletionSettings = updatedSettings });
+        }
+    }
+
     public ClientSettings GetClientSettings() => _settings;
 
     public void Update(ClientAdvancedSettings advancedSettings)
@@ -88,8 +102,6 @@ internal class ClientSettingsManager : EditorSettingsManager, IClientSettingsMan
             UpdateSettings_NoLock(_settings with { AdvancedSettings = advancedSettings });
         }
     }
-
-    private void AdvancedSettingsChanged(object sender, ClientAdvancedSettingsChangedEventArgs e) => Update(e.Settings);
 
     private void UpdateSettings_NoLock(ClientSettings settings)
     {

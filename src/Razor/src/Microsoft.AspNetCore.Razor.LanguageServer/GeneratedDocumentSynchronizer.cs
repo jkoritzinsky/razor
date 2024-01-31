@@ -10,12 +10,12 @@ namespace Microsoft.AspNetCore.Razor.LanguageServer;
 
 internal class GeneratedDocumentSynchronizer : DocumentProcessedListener
 {
-    private readonly GeneratedDocumentPublisher _publisher;
+    private readonly IGeneratedDocumentPublisher _publisher;
     private readonly IDocumentVersionCache _documentVersionCache;
     private readonly ProjectSnapshotManagerDispatcher _dispatcher;
 
     public GeneratedDocumentSynchronizer(
-        GeneratedDocumentPublisher publisher,
+        IGeneratedDocumentPublisher publisher,
         IDocumentVersionCache documentVersionCache,
         ProjectSnapshotManagerDispatcher dispatcher)
     {
@@ -24,7 +24,7 @@ internal class GeneratedDocumentSynchronizer : DocumentProcessedListener
         _dispatcher = dispatcher;
     }
 
-    public override void Initialize(ProjectSnapshotManager projectManager)
+    public override void Initialize(IProjectSnapshotManager projectManager)
     {
     }
 

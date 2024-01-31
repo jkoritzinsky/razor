@@ -7,8 +7,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.LanguageServer.Common;
 using Microsoft.AspNetCore.Razor.LanguageServer.EndpointContracts;
 using Microsoft.AspNetCore.Razor.LanguageServer.Protocol;
+using Microsoft.CodeAnalysis.Razor.Logging;
 using Microsoft.CodeAnalysis.Razor.Workspaces;
-using Microsoft.CommonLanguageServerProtocol.Framework;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using ImplementationResult = Microsoft.VisualStudio.LanguageServer.Protocol.SumType<
@@ -17,7 +17,7 @@ using ImplementationResult = Microsoft.VisualStudio.LanguageServer.Protocol.SumT
 
 namespace Microsoft.AspNetCore.Razor.LanguageServer.Implementation;
 
-[LanguageServerEndpoint(Methods.TextDocumentImplementationName)]
+[RazorLanguageServerEndpoint(Methods.TextDocumentImplementationName)]
 internal sealed class ImplementationEndpoint : AbstractRazorDelegatingEndpoint<TextDocumentPositionParams, ImplementationResult>, ICapabilitiesProvider
 {
     private readonly IRazorDocumentMappingService _documentMappingService;
@@ -26,7 +26,7 @@ internal sealed class ImplementationEndpoint : AbstractRazorDelegatingEndpoint<T
         LanguageServerFeatureOptions languageServerFeatureOptions,
         IRazorDocumentMappingService documentMappingService,
         IClientConnection clientConnection,
-        ILoggerFactory loggerFactory)
+        IRazorLoggerFactory loggerFactory)
         : base(languageServerFeatureOptions, documentMappingService, clientConnection, loggerFactory.CreateLogger<ImplementationEndpoint>())
     {
         _documentMappingService = documentMappingService ?? throw new ArgumentNullException(nameof(documentMappingService));

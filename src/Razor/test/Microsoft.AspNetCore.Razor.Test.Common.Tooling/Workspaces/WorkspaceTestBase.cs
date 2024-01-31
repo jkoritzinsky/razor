@@ -4,23 +4,22 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.AspNetCore.Razor.Language;
+using Microsoft.AspNetCore.Razor.ProjectEngineHost;
 using Microsoft.AspNetCore.Razor.Test.Common.ProjectSystem;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Host;
+using Microsoft.CodeAnalysis.Razor.Workspaces;
 using Xunit.Abstractions;
 
 namespace Microsoft.AspNetCore.Razor.Test.Common.Workspaces;
 
-public abstract class WorkspaceTestBase : ToolingTestBase
+public abstract class WorkspaceTestBase(ITestOutputHelper testOutput) : ToolingTestBase(testOutput)
 {
     private bool _initialized;
     private HostServices? _hostServices;
     private Workspace? _workspace;
-
-    protected WorkspaceTestBase(ITestOutputHelper testOutput)
-        : base(testOutput)
-    {
-    }
+    private IWorkspaceProvider? _workspaceProvider;
+    private IProjectEngineFactoryProvider? _projectEngineFactoryProvider;
 
     protected HostServices HostServices
     {
@@ -40,6 +39,24 @@ public abstract class WorkspaceTestBase : ToolingTestBase
         }
     }
 
+    private protected IWorkspaceProvider WorkspaceProvider
+    {
+        get
+        {
+            EnsureInitialized();
+            return _workspaceProvider;
+        }
+    }
+
+    private protected IProjectEngineFactoryProvider ProjectEngineFactoryProvider
+    {
+        get
+        {
+            EnsureInitialized();
+            return _projectEngineFactoryProvider;
+        }
+    }
+
     protected virtual void ConfigureWorkspaceServices(List<IWorkspaceService> services)
     {
     }
@@ -56,23 +73,24 @@ public abstract class WorkspaceTestBase : ToolingTestBase
     {
     }
 
-    [MemberNotNull(nameof(_hostServices), nameof(_workspace))]
+    [MemberNotNull(nameof(_hostServices), nameof(_workspace), nameof(_workspaceProvider), nameof(_projectEngineFactoryProvider))]
     private void EnsureInitialized()
     {
         if (_initialized)
         {
             _hostServices.AssumeNotNull();
             _workspace.AssumeNotNull();
+            _workspaceProvider.AssumeNotNull();
+            _projectEngineFactoryProvider.AssumeNotNull();
             return;
         }
 
-        var workspaceServices = new List<IWorkspaceService>()
+        _projectEngineFactoryProvider = new TestProjectEngineFactoryProvider()
         {
-            new TestProjectSnapshotProjectEngineFactory()
-            {
-                Configure = ConfigureProjectEngine,
-            },
+            Configure = ConfigureProjectEngine,
         };
+
+        var workspaceServices = new List<IWorkspaceService>();
         ConfigureWorkspaceServices(workspaceServices);
 
         var languageServices = new List<ILanguageService>();
@@ -81,6 +99,12 @@ public abstract class WorkspaceTestBase : ToolingTestBase
         _hostServices = TestServices.Create(workspaceServices, languageServices);
         _workspace = TestWorkspace.Create(_hostServices, ConfigureWorkspace);
         AddDisposable(_workspace);
+        _workspaceProvider = new TestWorkspaceProvider(_workspace);
         _initialized = true;
+    }
+
+    private sealed class TestWorkspaceProvider(Workspace workspace) : IWorkspaceProvider
+    {
+        public Workspace GetWorkspace() => workspace;
     }
 }

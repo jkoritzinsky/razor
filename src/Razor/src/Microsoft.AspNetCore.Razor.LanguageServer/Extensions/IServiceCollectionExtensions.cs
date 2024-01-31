@@ -120,16 +120,19 @@ internal static class IServiceCollectionExtensions
         services.AddSingleton<IHoverInfoService, HoverInfoService>();
     }
 
-    public static void AddSemanticTokensServices(this IServiceCollection services)
+    public static void AddSemanticTokensServices(this IServiceCollection services, LanguageServerFeatureOptions featureOptions)
     {
-        services.AddHandlerWithCapabilities<SemanticTokensRangeEndpoint>();
+        if (!featureOptions.UseRazorCohostServer)
+        {
+            services.AddHandlerWithCapabilities<SemanticTokensRangeEndpoint>();
+            // Ensure that we don't add the default service if something else has added one.
+            services.TryAddSingleton<IRazorSemanticTokensInfoService, RazorSemanticTokensInfoService>();
+        }
+
         services.AddHandler<RazorSemanticTokensRefreshEndpoint>();
 
         services.AddSingleton<WorkspaceSemanticTokensRefreshPublisher, DefaultWorkspaceSemanticTokensRefreshPublisher>();
         services.AddSingleton<IProjectSnapshotChangeTrigger, DefaultWorkspaceSemanticTokensRefreshTrigger>();
-
-        // Ensure that we don't add the default service if something else has added one.
-        services.TryAddSingleton<IRazorSemanticTokensInfoService, RazorSemanticTokensInfoService>();
     }
 
     public static void AddCodeActionsServices(this IServiceCollection services)
@@ -191,8 +194,8 @@ internal static class IServiceCollectionExtensions
 
     public static void AddDocumentManagementServices(this IServiceCollection services, LanguageServerFeatureOptions featureOptions)
     {
-        services.AddSingleton<GeneratedDocumentPublisher, DefaultGeneratedDocumentPublisher>();
-        services.AddSingleton<IProjectSnapshotChangeTrigger>((services) => services.GetRequiredService<GeneratedDocumentPublisher>());
+        services.AddSingleton<IGeneratedDocumentPublisher, GeneratedDocumentPublisher>();
+        services.AddSingleton<IProjectSnapshotChangeTrigger>((services) => (GeneratedDocumentPublisher)services.GetRequiredService<IGeneratedDocumentPublisher>());
         services.AddSingleton<IDocumentContextFactory, DocumentContextFactory>();
         services.AddSingleton(sp => new Lazy<IDocumentContextFactory>(sp.GetRequiredService<IDocumentContextFactory>));
 
@@ -201,7 +204,7 @@ internal static class IServiceCollectionExtensions
 
         services.AddSingleton<RemoteTextLoaderFactory, DefaultRemoteTextLoaderFactory>();
         services.AddSingleton<ISnapshotResolver, SnapshotResolver>();
-        services.AddSingleton<RazorProjectService, DefaultRazorProjectService>();
+        services.AddSingleton<IRazorProjectService, RazorProjectService>();
         services.AddSingleton<IProjectSnapshotChangeTrigger, OpenDocumentGenerator>();
         services.AddSingleton<IRazorDocumentMappingService, RazorDocumentMappingService>();
         services.AddSingleton<RazorFileChangeDetectorManager>();
@@ -228,10 +231,15 @@ internal static class IServiceCollectionExtensions
             services.AddSingleton<DocumentProcessedListener, RazorDiagnosticsPublisher>();
         }
 
-        services.AddSingleton<DocumentProcessedListener, GeneratedDocumentSynchronizer>();
+        // Don't generate documents in the language server if cohost is enabled, let cohost do it.
+        if (!featureOptions.UseRazorCohostServer)
+        {
+            services.AddSingleton<DocumentProcessedListener, GeneratedDocumentSynchronizer>();
+        }
+
         services.AddSingleton<DocumentProcessedListener, CodeDocumentReferenceHolder>();
 
-        services.AddSingleton<ProjectSnapshotManagerAccessor, DefaultProjectSnapshotManagerAccessor>();
+        services.AddSingleton<IProjectSnapshotManagerAccessor, LspProjectSnapshotManagerAccessor>();
         services.AddSingleton<ITagHelperFactsService, TagHelperFactsService>();
         services.AddSingleton<LSPTagHelperTooltipFactory, DefaultLSPTagHelperTooltipFactory>();
         services.AddSingleton<VSLSPTagHelperTooltipFactory, DefaultVSLSPTagHelperTooltipFactory>();

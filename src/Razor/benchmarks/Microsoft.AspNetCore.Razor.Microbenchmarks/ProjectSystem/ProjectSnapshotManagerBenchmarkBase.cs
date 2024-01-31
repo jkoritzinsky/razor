@@ -6,11 +6,8 @@ using System.Collections.Immutable;
 using System.IO;
 using Microsoft.AspNetCore.Razor.Language;
 using Microsoft.AspNetCore.Razor.PooledObjects;
-using Microsoft.AspNetCore.Razor.Test.Common.Workspaces;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
-using Microsoft.CodeAnalysis.Razor.Workspaces;
 using Microsoft.CodeAnalysis.Text;
 
 namespace Microsoft.AspNetCore.Razor.Microbenchmarks;
@@ -20,7 +17,6 @@ public abstract partial class ProjectSnapshotManagerBenchmarkBase
     internal HostProject HostProject { get; }
     internal ImmutableArray<HostDocument> Documents { get; }
     internal ImmutableArray<TextLoader> TextLoaders { get; }
-    internal ITagHelperResolver TagHelperResolver { get; }
     protected string RepoRoot { get; }
 
     protected ProjectSnapshotManagerBenchmarkBase(int documentCount = 100)
@@ -59,27 +55,14 @@ public abstract partial class ProjectSnapshotManagerBenchmarkBase
         }
 
         Documents = documents.ToImmutable();
-
-        var tagHelpers = CommonResources.LegacyTagHelpers;
-        TagHelperResolver = new StaticTagHelperResolver(tagHelpers);
     }
 
     internal DefaultProjectSnapshotManager CreateProjectSnapshotManager()
     {
-        var services = TestServices.Create(
-            new IWorkspaceService[]
-            {
-                TagHelperResolver,
-                new StaticProjectSnapshotProjectEngineFactory(),
-            },
-            Array.Empty<ILanguageService>());
-
         return new DefaultProjectSnapshotManager(
-            new TestErrorReporter(),
-            Array.Empty<IProjectSnapshotChangeTrigger>(),
-#pragma warning disable CA2000 // Dispose objects before losing scope
-            new AdhocWorkspace(services),
-            new TestProjectSnapshotManagerDispatcher());
-#pragma warning restore CA2000 // Dispose objects before losing scope
+            triggers: [],
+            projectEngineFactoryProvider: StaticProjectEngineFactoryProvider.Instance,
+            dispatcher: new TestProjectSnapshotManagerDispatcher(),
+            errorReporter: new TestErrorReporter());
     }
 }

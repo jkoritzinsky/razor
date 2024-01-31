@@ -4,7 +4,6 @@
 #nullable disable
 
 using System;
-using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Language;
@@ -43,7 +42,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
     public async Task DocumentAdded_IgnoresClosedDocument()
     {
         // Arrange
-        var projectManager = TestProjectSnapshotManager.Create(ErrorReporter, Dispatcher);
+        var projectManager = TestProjectSnapshotManager.Create(Dispatcher, ErrorReporter);
         var listener = new TestDocumentProcessedListener();
         var queue = new TestOpenDocumentGenerator(Dispatcher, ErrorReporter, listener);
 
@@ -67,7 +66,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
     public async Task DocumentChanged_IgnoresClosedDocument()
     {
         // Arrange
-        var projectManager = TestProjectSnapshotManager.Create(ErrorReporter, Dispatcher);
+        var projectManager = TestProjectSnapshotManager.Create(Dispatcher, ErrorReporter);
         var listener = new TestDocumentProcessedListener();
         var queue = new TestOpenDocumentGenerator(Dispatcher, ErrorReporter, listener);
 
@@ -92,7 +91,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
     public async Task DocumentChanged_ProcessesOpenDocument()
     {
         // Arrange
-        var projectManager = TestProjectSnapshotManager.Create(ErrorReporter, Dispatcher);
+        var projectManager = TestProjectSnapshotManager.Create(Dispatcher, ErrorReporter);
         var listener = new TestDocumentProcessedListener();
         var queue = new TestOpenDocumentGenerator(Dispatcher, ErrorReporter, listener);
 
@@ -120,7 +119,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
     public async Task ProjectChanged_IgnoresClosedDocument()
     {
         // Arrange
-        var projectManager = TestProjectSnapshotManager.Create(ErrorReporter, Dispatcher);
+        var projectManager = TestProjectSnapshotManager.Create(Dispatcher, ErrorReporter);
         var listener = new TestDocumentProcessedListener();
         var queue = new TestOpenDocumentGenerator(Dispatcher, ErrorReporter, listener);
 
@@ -135,7 +134,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
 
             // Act
             projectManager.ProjectWorkspaceStateChanged(_hostProject1.Key,
-                new ProjectWorkspaceState(ImmutableArray<TagHelperDescriptor>.Empty, LanguageVersion.CSharp8));
+                ProjectWorkspaceState.Create(LanguageVersion.CSharp8));
         }, DisposalToken);
 
         // Assert
@@ -146,7 +145,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
     public async Task ProjectChanged_ProcessesOpenDocument()
     {
         // Arrange
-        var projectManager = TestProjectSnapshotManager.Create(ErrorReporter, Dispatcher);
+        var projectManager = TestProjectSnapshotManager.Create(Dispatcher, ErrorReporter);
         var listener = new TestDocumentProcessedListener();
         var queue = new TestOpenDocumentGenerator(Dispatcher, ErrorReporter, listener);
 
@@ -162,7 +161,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
 
             // Act
             projectManager.ProjectWorkspaceStateChanged(_hostProject1.Key,
-                new ProjectWorkspaceState(ImmutableArray<TagHelperDescriptor>.Empty, LanguageVersion.CSharp8));
+                ProjectWorkspaceState.Create(LanguageVersion.CSharp8));
         }, DisposalToken);
 
         // Assert
@@ -211,7 +210,7 @@ public class OpenDocumentGeneratorTest : LanguageServerTestBase
             _tcs.SetResult(document);
         }
 
-        public override void Initialize(ProjectSnapshotManager projectManager)
+        public override void Initialize(IProjectSnapshotManager projectManager)
         {
         }
     }

@@ -5,6 +5,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Razor.Test.Common.Editor;
 using Microsoft.CodeAnalysis.Razor.Editor;
 using Xunit;
@@ -82,7 +83,7 @@ public class ClientSettingsManagerTest(ITestOutputHelper testOutput) : ProjectSn
         var manager = new ClientSettingsManager(_editorSettingsChangeTriggers);
         var called = false;
         manager.Changed += (caller, args) => called = true;
-        var settings = new ClientAdvancedSettings(FormatOnType: false, AutoClosingTags: true, AutoInsertAttributeQuotes: true, ColorBackground: true, CommitElementsWithSpace: false, SnippetSetting: default);
+        var settings = new ClientAdvancedSettings(FormatOnType: false, AutoClosingTags: true, AutoInsertAttributeQuotes: true, ColorBackground: true, CommitElementsWithSpace: false, SnippetSetting: default, LogLevel: default);
 
         // Act
         manager.Update(settings);
@@ -142,13 +143,18 @@ public class ClientSettingsManagerTest(ITestOutputHelper testOutput) : ProjectSn
             _settings = settings;
         }
 
-#pragma warning disable CS0067 // The event 'ClientSettingsManagerTest.AdvancedSettingsStorage.Changed' is never used
-        public event EventHandler<ClientAdvancedSettingsChangedEventArgs> Changed;
-#pragma warning restore CS0067 // The event 'ClientSettingsManagerTest.AdvancedSettingsStorage.Changed' is never used
-
         public ClientAdvancedSettings GetAdvancedSettings()
         {
             return _settings;
+        }
+
+        public void Dispose()
+        {
+        }
+
+        public Task OnChangedAsync(Action<ClientAdvancedSettings> changed)
+        {
+            return Task.CompletedTask;
         }
     }
 }

@@ -11,10 +11,10 @@ using Microsoft.AspNetCore.Razor.Test.Common.LanguageServer;
 using Microsoft.AspNetCore.Razor.Test.Common.Workspaces;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Razor;
+using Microsoft.CodeAnalysis.Razor.Logging;
 using Microsoft.CodeAnalysis.Razor.ProjectSystem;
 using Microsoft.CodeAnalysis.Razor.Workspaces;
 using Microsoft.CodeAnalysis.Text;
-using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.LanguageServer.Protocol;
 using Moq;
 using Xunit;
@@ -49,7 +49,7 @@ public class RazorDiagnosticsPublisherTest : LanguageServerTestBase
         }
     ];
 
-    private readonly ProjectSnapshotManager _projectManager;
+    private readonly IProjectSnapshotManager _projectManager;
     private readonly IDocumentSnapshot _closedDocument;
     private readonly IDocumentSnapshot _openedDocument;
     private readonly RazorCodeDocument _testCodeDocument;
@@ -58,7 +58,7 @@ public class RazorDiagnosticsPublisherTest : LanguageServerTestBase
     public RazorDiagnosticsPublisherTest(ITestOutputHelper testOutput)
         : base(testOutput)
     {
-        var testProjectManager = TestProjectSnapshotManager.Create(ErrorReporter, Dispatcher);
+        var testProjectManager = TestProjectSnapshotManager.Create(Dispatcher, ErrorReporter);
         var hostProject = new HostProject("C:/project/project.csproj", "C:/project/obj", RazorConfiguration.Default, "TestRootNamespace");
         testProjectManager.ProjectAdded(hostProject);
         var sourceText = SourceText.From(string.Empty);
@@ -537,7 +537,7 @@ public class RazorDiagnosticsPublisherTest : LanguageServerTestBase
             LanguageServerFeatureOptions options,
             RazorTranslateDiagnosticsService razorTranslateDiagnosticsService,
             IDocumentContextFactory documentContextFactory,
-            ILoggerFactory loggerFactory)
+            IRazorLoggerFactory loggerFactory)
             : base(dispatcher, clientConnection, options,
                   new Lazy<RazorTranslateDiagnosticsService>(() => razorTranslateDiagnosticsService),
                   new Lazy<IDocumentContextFactory>(() => documentContextFactory),
