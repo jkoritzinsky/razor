@@ -28,7 +28,7 @@ internal class RazorSemanticTokensLegend
     private static readonly string RazorCommentStarType = "razorCommentStar";
     private static readonly string RazorCommentTransitionType = "razorCommentTransition";
     private static readonly string RazorCommentType = "razorComment";
-    private static readonly string RazorComponentAttributeType = "RazorComponentAttribute";
+    private static readonly string RazorComponentAttributeType = "razorComponentAttribute";
     private static readonly string RazorComponentElementType = "razorComponentElement";
     private static readonly string RazorDirectiveAttributeType = "razorDirectiveAttribute";
     private static readonly string RazorDirectiveColonType = "razorDirectiveColon";
